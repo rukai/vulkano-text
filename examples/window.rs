@@ -62,7 +62,7 @@ fn main() {
     };
 
     let queue = queues.next().unwrap();
-    let (swapchain, images) = {
+    let (mut swapchain, mut images) = {
         let caps = window.surface().get_capabilities(&physical)
                          .expect("failed to get surface capabilities");
         let dimensions = caps.current_extent.unwrap_or([1280, 1024]);
@@ -78,7 +78,7 @@ fn main() {
         color: (images[0].format(), 1)
     }).unwrap();
 
-    let framebuffers = images.iter().map(|image| {
+    let mut framebuffers = images.iter().map(|image| {
         let dimensions = [image.dimensions()[0], image.dimensions()[1], 1];
         Framebuffer::new(&render_pass, dimensions, render_pass::AList {
             color: image
@@ -92,8 +92,30 @@ fn main() {
 
     let mut x = -200.0;
 
+    let (mut width, mut height) = window.window().get_inner_size_points().unwrap();
+
     loop {
-        let (width, height) = window.window().get_inner_size_points().unwrap();
+        // TODO: https://github.com/tomaka/vulkano/issues/366 I guess we are waiting on the vulkano rewrite for this to not explode
+        // TODO: Comment out all the draw_text code and resizing fails as described in the issue.
+        let (new_width, new_height) = window.window().get_inner_size_points().unwrap();
+        if width != new_width || height != new_height {
+            width = new_width;
+            height = new_height;
+
+            let swapchain_results = swapchain.recreate_with_dimension([width, height]).unwrap();
+            swapchain = swapchain_results.0;
+            images = swapchain_results.1;
+
+            framebuffers = images.iter().map(|image| {
+                let dimensions = [image.dimensions()[0], image.dimensions()[1], 1];
+                Framebuffer::new(&render_pass, dimensions, render_pass::AList {
+                    color: image
+                }).unwrap()
+            }).collect::<Vec<_>>();
+
+            // UNIQUE CODE: recreate DrawText due to new window size
+            draw_text = DrawText::new(&device, &queue, &images);
+        }
 
         if x > width as f32 {
             x = 0.0;

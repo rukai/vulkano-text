@@ -134,7 +134,7 @@ fn main() {
             .begin_render_pass(framebuffers[image_num].clone(), false, vec![[0.0, 0.0, 0.0, 1.0].into()]).unwrap()
 
             // UNIQUE CODE: draw the text
-            .draw_text(&mut draw_text, device.clone(), queue.clone(), width, height)
+            .draw_text(&mut draw_text, queue.clone(), width, height)
             // UNIQUE CODE END
 
             .end_render_pass().unwrap()

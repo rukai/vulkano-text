@@ -58,8 +58,8 @@ struct TextData<'a> {
 }
 
 pub struct DrawText<'a> {
+    device:             Arc<Device>,
     font:               Font<'a>,
-    // device:             Arc<Device>, // TODO: Just store the Device rather then passing it all the time.
     cache:              Cache,
     cache_width:        usize,
     cache_texture:      Arc<ImmutableImage<R8Unorm>>,
@@ -139,6 +139,7 @@ impl<'a> DrawText<'a> {
         }));
 
         DrawText {
+            device:             device.clone(),
             font:               font,
             cache:              cache,
             cache_width:        cache_width,
@@ -190,7 +191,7 @@ impl<'a> DrawText<'a> {
         ).unwrap()
     }
 
-    pub fn draw_text(&mut self, mut command_buffer_draw: AutoCommandBufferBuilder, device: Arc<Device>, queue: Arc<Queue>, screen_width: u32, screen_height: u32) -> AutoCommandBufferBuilder {
+    pub fn draw_text(&mut self, mut command_buffer_draw: AutoCommandBufferBuilder, queue: Arc<Queue>, screen_width: u32, screen_height: u32) -> AutoCommandBufferBuilder {
         let cache = &mut self.cache;
         for text in &mut self.texts.drain(..) {
             let vertices: Vec<Vertex> = text.glyphs.iter().flat_map(|g| {
@@ -244,7 +245,7 @@ impl<'a> DrawText<'a> {
                 }
             }).collect();
 
-            let vertex_buffer = CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), Some(queue.family()), vertices.into_iter()).unwrap();
+            let vertex_buffer = CpuAccessibleBuffer::from_iter(self.device.clone(), BufferUsage::all(), Some(queue.family()), vertices.into_iter()).unwrap();
             command_buffer_draw = command_buffer_draw.draw(self.pipeline.clone(), DynamicState::none(), vertex_buffer.clone(), self.set.clone(), ()).unwrap();
         }
         command_buffer_draw
@@ -258,8 +259,8 @@ impl UpdateTextCache for AutoCommandBufferBuilder {
 }
 
 impl DrawTextTrait for AutoCommandBufferBuilder {
-    fn draw_text(self, data: &mut DrawText, device: Arc<Device>, queue: Arc<Queue>, screen_width: u32, screen_height: u32) -> AutoCommandBufferBuilder {
-        data.draw_text(self, device, queue, screen_width, screen_height)
+    fn draw_text(self, data: &mut DrawText, queue: Arc<Queue>, screen_width: u32, screen_height: u32) -> AutoCommandBufferBuilder {
+        data.draw_text(self, queue, screen_width, screen_height)
     }
 }
 
@@ -268,5 +269,5 @@ pub trait UpdateTextCache {
 }
 
 pub trait DrawTextTrait {
-    fn draw_text(self, data: &mut DrawText, device: Arc<Device>, queue: Arc<Queue>, screen_width: u32, screen_height: u32) -> AutoCommandBufferBuilder;
+    fn draw_text(self, data: &mut DrawText, queue: Arc<Queue>, screen_width: u32, screen_height: u32) -> AutoCommandBufferBuilder;
 }

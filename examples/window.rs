@@ -1,5 +1,5 @@
 // Most of this is just standard vulkano setup
-// Check the code following the UNIQUE CODE comments
+// Check the code between UNIQUE CODE comments
 
 #[macro_use]
 extern crate vulkano;
@@ -10,35 +10,16 @@ extern crate vulkano_text;
 use vulkano_text::{DrawText, DrawTextTrait, UpdateTextCache};
 
 use vulkano_win::VkSurfaceBuild;
-use vulkano::command_buffer;
-use vulkano::command_buffer::PrimaryCommandBufferBuilder;
-use vulkano::command_buffer::Submission;
+use vulkano::command_buffer::{CommandBufferBuilder, AutoCommandBufferBuilder};
 use vulkano::device::Device;
 use vulkano::framebuffer::Framebuffer;
 use vulkano::instance::Instance;
-use vulkano::swapchain::SurfaceTransform;
-use vulkano::swapchain::Swapchain;
+use vulkano::swapchain::{Swapchain, SurfaceTransform, PresentMode};
+use vulkano::swapchain;
+use vulkano::sync::{now, GpuFuture};
 
 use std::sync::Arc;
 use std::time::Duration;
-
-mod render_pass {
-    use vulkano::format::Format;
-
-    single_pass_renderpass!{
-        attachments: {
-            color: {
-                load: Clear,
-                store: Store,
-                format: Format,
-            }
-        },
-        pass: {
-            color: [color],
-            depth_stencil: {}
-        }
-    }
-}
 
 fn main() {
     let instance = {
@@ -46,8 +27,9 @@ fn main() {
         Instance::new(None, &extensions, None).expect("failed to create Vulkan instance")
     };
     let physical = vulkano::instance::PhysicalDevice::enumerate(&instance).next().expect("no device available");
-    let window = winit::WindowBuilder::new().build_vk_surface(&instance).unwrap();
-    let queue = physical.queue_families().find(|q| {
+    let events_loop = winit::EventsLoop::new();
+    let window = winit::WindowBuilder::new().build_vk_surface(&events_loop, instance.clone()).unwrap();
+    let queue = physical.queue_families().find(|&q| {
         q.supports_graphics() && window.surface().is_supported(q).unwrap_or(false)
     }).expect("couldn't find a graphical queue family");
 
@@ -63,40 +45,51 @@ fn main() {
 
     let queue = queues.next().unwrap();
     let (mut swapchain, mut images) = {
-        let caps = window.surface().get_capabilities(&physical)
+        let caps = window.surface().capabilities(physical)
                          .expect("failed to get surface capabilities");
         let dimensions = caps.current_extent.unwrap_or([1280, 1024]);
-        let present = caps.present_modes.iter().next().unwrap();
         let alpha = caps.supported_composite_alpha.iter().next().unwrap();
         let format = caps.supported_formats[0].0;
-        Swapchain::new(&device, &window.surface(), caps.min_image_count, format, dimensions, 1,
-           &caps.supported_usage_flags, &queue, SurfaceTransform::Identity, alpha,
-           present, true, None).expect("failed to create swapchain")
+        Swapchain::new(device.clone(), window.surface().clone(), caps.min_image_count, format, dimensions, 1,
+           caps.supported_usage_flags, &queue, SurfaceTransform::Identity, alpha,
+           PresentMode::Fifo, true, None
+        ).expect("failed to create swapchain")
     };
 
-    let render_pass = render_pass::CustomRenderPass::new(&device, &render_pass::Formats {
-        color: (images[0].format(), 1)
-    }).unwrap();
+    let render_pass = Arc::new(single_pass_renderpass!(device.clone(),
+        attachments: {
+            color: {
+                load: Clear,
+                store: Store,
+                format: swapchain.format(),
+                samples: 1,
+            }
+        },
+        pass: {
+            color: [color],
+            depth_stencil: {}
+        }
+    ).unwrap());
 
     let mut framebuffers = images.iter().map(|image| {
-        let dimensions = [image.dimensions()[0], image.dimensions()[1], 1];
-        Framebuffer::new(&render_pass, dimensions, render_pass::AList {
-            color: image
-        }).unwrap()
+        Arc::new(Framebuffer::start(render_pass.clone())
+            .add(image.clone()).unwrap()
+            .build().unwrap())
     }).collect::<Vec<_>>();
 
-    let mut submissions: Vec<Arc<Submission>> = Vec::new();
-
     // UNIQUE CODE: create DrawText
-    let mut draw_text = DrawText::new(&device, &queue, &images);
+    let mut draw_text = DrawText::new(device.clone(), queue.clone(), swapchain.clone(), &images); // uncommenting causes panic
 
     let mut x = -200.0;
+    // UNIQUE CODE END
 
     let (mut width, mut height) = window.window().get_inner_size_points().unwrap();
 
+    let mut previous_frame_end = Box::new(now(device.clone())) as Box<GpuFuture>;
+
     loop {
-        // TODO: https://github.com/tomaka/vulkano/issues/366 I guess we are waiting on the vulkano rewrite for this to not explode
-        // TODO: Comment out all the draw_text code and resizing fails as described in the issue.
+        previous_frame_end.cleanup_finished();
+
         let (new_width, new_height) = window.window().get_inner_size_points().unwrap();
         if width != new_width || height != new_height {
             width = new_width;
@@ -107,16 +100,17 @@ fn main() {
             images = swapchain_results.1;
 
             framebuffers = images.iter().map(|image| {
-                let dimensions = [image.dimensions()[0], image.dimensions()[1], 1];
-                Framebuffer::new(&render_pass, dimensions, render_pass::AList {
-                    color: image
-                }).unwrap()
+                Arc::new(Framebuffer::start(render_pass.clone())
+                    .add(image.clone()).unwrap()
+                    .build().unwrap())
             }).collect::<Vec<_>>();
 
             // UNIQUE CODE: recreate DrawText due to new window size
-            draw_text = DrawText::new(&device, &queue, &images);
+            draw_text = DrawText::new(device.clone(), queue.clone(), swapchain.clone(), &images);
+            // UNIQUE CODE END
         }
 
+        // UNIQUE CODE: scrolling text!
         if x > width as f32 {
             x = 0.0;
         }
@@ -124,38 +118,42 @@ fn main() {
             x += 0.4;
         }
 
-        // UNIQUE CODE: add queue text
         draw_text.queue_text(200.0, 50.0, 20.0, [1.0, 1.0, 1.0, 1.0], "The quick brown fox jumps over the lazy dog.");
         draw_text.queue_text(20.0, 200.0, 190.0, [1.0, 0.0, 0.0, 1.0], "Hello world!");
         draw_text.queue_text(x, 350.0, 70.0, [0.51, 0.6, 0.74, 1.0], "Lenny: ( ͡° ͜ʖ ͡°)");
         draw_text.queue_text(50.0, 350.0, 70.0, [1.0, 1.0, 1.0, 1.0], "Overlap");
+        // UNIQUE CODE END
 
-        submissions.retain(|s| s.destroying_would_block());
-        let image_num = swapchain.acquire_next_image(Duration::new(1, 0)).unwrap();
+        let (image_num, acquire_future) = swapchain::acquire_next_image(swapchain.clone(), Duration::new(1, 0)).unwrap();
 
-        let command_buffer = PrimaryCommandBufferBuilder::new(&device, queue.family())
+        let command_buffer = AutoCommandBufferBuilder::new(device.clone(), queue.family()).unwrap()
+            // UNIQUE CODE: update DrawTextData internal cache
+            .update_text_cache(&mut draw_text)
+            // UNIQUE CODE END
 
-        // UNIQUE CODE: update DrawTextData internal cache
-        .update_text_cache(&mut draw_text)
+            .begin_render_pass(framebuffers[image_num].clone(), false, vec![[0.0, 0.0, 0.0, 1.0].into()]).unwrap()
 
-        .draw_inline(&render_pass, &framebuffers[image_num], render_pass::ClearValues {
-            color: [0.0, 0.0, 0.0, 1.0]
-        })
+            // UNIQUE CODE: draw the text
+            .draw_text(&mut draw_text, device.clone(), queue.clone(), width, height)
+            // UNIQUE CODE END
 
-        // UNIQUE CODE: draw the text
-        .draw_text(&mut draw_text, &device, &queue, width, height)
+            .end_render_pass().unwrap()
+            .build().unwrap();
 
-        .draw_end()
-        .build();
 
-        submissions.push(command_buffer::submit(&command_buffer, &queue).unwrap());
-        swapchain.present(&queue, image_num).unwrap();
+        let future = previous_frame_end.join(acquire_future)
+            .then_execute(queue.clone(), command_buffer).unwrap()
+            .then_swapchain_present(queue.clone(), swapchain.clone(), image_num)
+            .then_signal_fence_and_flush().unwrap();
+        previous_frame_end = Box::new(future) as Box<_>;
 
-        for ev in window.window().poll_events() {
+        let mut done = false;
+        events_loop.poll_events(|ev| {
             match ev {
-                winit::Event::Closed => return,
+                winit::Event::WindowEvent { event: winit::WindowEvent::Closed, .. } => done = true,
                 _ => ()
             }
-        }
+        });
+        if done { return; }
     }
 }

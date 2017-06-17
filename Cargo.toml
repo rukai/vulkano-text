@@ -1,6 +1,6 @@
 [package]
 name = "vulkano_text"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Rukai <rubickent@gmail.com>"]
 description = "Render text with the DejaVu font using the Vulkano library."
 license = "MIT"
@@ -9,11 +9,9 @@ keywords = ["vulkano", "text", "font"]
 
 [dependencies]
 rusttype = "0.2"
-vulkano = "0.3"
-
-[build-dependencies]
-vulkano-shaders = "0.3"
+vulkano = "0.4"
+vulkano-shader-derive = "0.4"
 
 [dev-dependencies]
-winit = "0.5"
-vulkano-win = "0.3"
+winit = "0.6"
+vulkano-win = "0.4"

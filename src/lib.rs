@@ -106,7 +106,7 @@ impl<'a> DrawText<'a> {
             0.0, 1.0, 0.0, 0.0
         ).unwrap();
 
-        let render_pass = render_pass_desc::Desc { // TODO: panic here
+        let render_pass = render_pass_desc::Desc {
             color: (swapchain.format(), 1)
         }.build_render_pass(device.clone()).unwrap();
 

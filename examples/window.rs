@@ -7,7 +7,9 @@ extern crate winit;
 extern crate vulkano_win;
 extern crate vulkano_text;
 
+// UNIQUE CODE: use
 use vulkano_text::{DrawText, DrawTextTrait, UpdateTextCache};
+// UNIQUE CODE END
 
 use vulkano_win::VkSurfaceBuild;
 use vulkano::command_buffer::{CommandBufferBuilder, AutoCommandBufferBuilder};
@@ -78,7 +80,7 @@ fn main() {
     }).collect::<Vec<_>>();
 
     // UNIQUE CODE: create DrawText
-    let mut draw_text = DrawText::new(device.clone(), queue.clone(), swapchain.clone(), &images); // uncommenting causes panic
+    let mut draw_text = DrawText::new(device.clone(), queue.clone(), swapchain.clone(), &images);
 
     let mut x = -200.0;
     // UNIQUE CODE END
@@ -110,7 +112,7 @@ fn main() {
             // UNIQUE CODE END
         }
 
-        // UNIQUE CODE: scrolling text!
+        // UNIQUE CODE: specify text to draw
         if x > width as f32 {
             x = 0.0;
         }

@@ -2,7 +2,7 @@
 
 Render text with the DejaVu font using the Vulkano library.
 
-##[Documentation](https://docs.rs/vulkano_text)
+## [Documentation](https://docs.rs/vulkano_text)
 
 ## Usage:
 

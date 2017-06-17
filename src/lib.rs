@@ -9,7 +9,7 @@ use rusttype::gpu_cache::Cache;
 
 use vulkano::buffer::{CpuAccessibleBuffer, BufferUsage};
 use vulkano::command_buffer::{DynamicState, AutoCommandBufferBuilder, CommandBufferBuilder};
-use vulkano::descriptor::descriptor_set::{DescriptorPool, SimpleDescriptorSet, SimpleDescriptorSetImg};
+use vulkano::descriptor::descriptor_set::{SimpleDescriptorSet, SimpleDescriptorSetImg};
 use vulkano::descriptor::pipeline_layout::{PipelineLayout, PipelineLayoutDescUnion};
 use vulkano::device::{Device, Queue};
 use vulkano::format::R8Unorm;
@@ -27,7 +27,6 @@ use vulkano::sampler::{Sampler, Filter, MipmapMode, SamplerAddressMode};
 use vulkano::swapchain::Swapchain;
 
 use std::sync::Arc;
-use std::time::Duration;
 use std::io::Write;
 
 #[derive(Debug, Clone)]
@@ -42,6 +41,7 @@ mod vs {
     #[derive(VulkanoShader)]
     #[ty = "vertex"]
     #[path = "src/shaders/vertex.glsl"]
+    #[allow(dead_code)]
     struct Dummy;
 }
 
@@ -49,6 +49,7 @@ mod fs {
     #[derive(VulkanoShader)]
     #[ty = "fragment"]
     #[path = "src/shaders/fragment.glsl"]
+    #[allow(dead_code)]
     struct Dummy;
 }
 

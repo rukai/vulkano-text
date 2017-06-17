@@ -2,7 +2,6 @@ use vulkano::framebuffer::{RenderPassDesc, RenderPassDescClearValues};
 use vulkano::format::{Format, ClearValue};
 use vulkano::framebuffer::{LayoutAttachmentDescription, LayoutPassDescription, LayoutPassDependencyDescription, LoadOp, StoreOp};
 use vulkano::image::ImageLayout;
-use vulkano::sync::{AccessFlagBits, PipelineStages};
 
 pub struct Desc {
     pub color: (Format, u32),
@@ -52,6 +51,7 @@ unsafe impl RenderPassDesc for Desc {
         0
     }
 
+    #[allow(unused_variables)]
     fn dependency_desc(&self, id: usize) -> Option<LayoutPassDependencyDescription> {
         None
     }

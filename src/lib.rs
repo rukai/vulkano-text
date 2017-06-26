@@ -10,22 +10,19 @@ use rusttype::gpu_cache::Cache;
 use vulkano::buffer::{CpuAccessibleBuffer, BufferUsage};
 use vulkano::command_buffer::{DynamicState, AutoCommandBufferBuilder, CommandBufferBuilder};
 use vulkano::descriptor::descriptor_set::{SimpleDescriptorSet, SimpleDescriptorSetImg};
-use vulkano::descriptor::pipeline_layout::{PipelineLayout, PipelineLayoutDescUnion};
+use vulkano::descriptor::pipeline_layout::PipelineLayoutAbstract;
 use vulkano::device::{Device, Queue};
 use vulkano::format::R8Unorm;
 use vulkano::framebuffer::{Subpass, RenderPass, RenderPassDesc};
 use vulkano::image::SwapchainImage;
 use vulkano::image::immutable::ImmutableImage;
-use vulkano::pipeline::blend::Blend;
-use vulkano::pipeline::depth_stencil::DepthStencil;
-use vulkano::pipeline::input_assembly::InputAssembly;
-use vulkano::pipeline::multisample::Multisample;
 use vulkano::pipeline::vertex::SingleBufferDefinition;
-use vulkano::pipeline::viewport::{ViewportsState, Viewport, Scissor};
-use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineParams};
+use vulkano::pipeline::viewport::Viewport;
+use vulkano::pipeline::GraphicsPipeline;
 use vulkano::sampler::{Sampler, Filter, MipmapMode, SamplerAddressMode};
 use vulkano::swapchain::Swapchain;
 
+use std::iter;
 use std::sync::Arc;
 use std::io::Write;
 
@@ -66,7 +63,7 @@ pub struct DrawText<'a> {
     cache_texture:      Arc<ImmutableImage<R8Unorm>>,
     cache_pixel_buffer: Arc<CpuAccessibleBuffer<[u8]>>,
     set:                Arc<SimpleDescriptorSet<((), SimpleDescriptorSetImg<Arc<ImmutableImage<R8Unorm>>>)>>,
-    pipeline:           Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, PipelineLayout<PipelineLayoutDescUnion<vs::Layout, fs::Layout>>, RenderPass<render_pass_desc::Desc>>>,
+    pipeline:           Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, Box<PipelineLayoutAbstract + Send + Sync>, Arc<RenderPass<render_pass_desc::Desc>>>>,
     texts:              Vec<TextData<'a>>,
 }
 
@@ -107,33 +104,28 @@ impl<'a> DrawText<'a> {
             0.0, 1.0, 0.0, 0.0
         ).unwrap();
 
-        let render_pass = render_pass_desc::Desc {
+        let render_pass = Arc::new(render_pass_desc::Desc {
             color: (swapchain.format(), 1)
-        }.build_render_pass(device.clone()).unwrap();
+        }.build_render_pass(device.clone()).unwrap());
 
-        let pipeline = Arc::new(GraphicsPipeline::new(device.clone(), GraphicsPipelineParams {
-            vertex_input:    SingleBufferDefinition::new(),
-            vertex_shader:   vs.main_entry_point(),
-            input_assembly:  InputAssembly::triangle_list(),
-            tessellation:    None,
-            geometry_shader: None,
-            viewport: ViewportsState::Fixed {
-                data: vec![(
-                    Viewport {
-                        origin:      [0.0, 0.0],
-                        depth_range: 0.0 .. 1.0,
-                        dimensions:  [images[0].dimensions()[0] as f32, images[0].dimensions()[1] as f32],
-                    },
-                    Scissor::irrelevant()
-                )],
-            },
-            raster:          Default::default(),
-            multisample:     Multisample::disabled(),
-            fragment_shader: fs.main_entry_point(),
-            depth_stencil:   DepthStencil::disabled(),
-            blend:           Blend::alpha_blending(),
-            render_pass:     Subpass::from(render_pass, 0).unwrap(),
-        }).unwrap());
+        let pipeline = Arc::new(GraphicsPipeline::start()
+            .vertex_input_single_buffer()
+            .vertex_shader(vs.main_entry_point(), ())
+            .triangle_list()
+            .viewports(iter::once(Viewport {
+                origin:      [0.0, 0.0],
+                depth_range: 0.0..1.0,
+                dimensions:  [
+                    images[0].dimensions()[0] as f32,
+                    images[0].dimensions()[1] as f32
+                ],
+            }))
+            .fragment_shader(fs.main_entry_point(), ())
+            .blend_alpha_blending()
+            .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
+            .build(device.clone())
+            .unwrap()
+        );
 
         let set = Arc::new(simple_descriptor_set!(pipeline.clone(), 0, {
             tex: (cache_texture.clone(), sampler.clone())

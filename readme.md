@@ -27,13 +27,14 @@ let mut draw_text = DrawText::new(device.clone(), queue.clone(), swapchain.clone
 Specify text to draw by calling queue_text:
 ```
 draw_text.queue_text(200.0, 50.0, 20.0, [1.0, 1.0, 1.0, 1.0], "The quick brown fox jumps over the lazy dog.");
-draw_text.queue_text(20.0, 200.0, 190.0, [1.0, 0.0, 0.0, 1.0], "Hello world!");
+draw_text.queue_text(20.0, 200.0, 190.0, [0.0, 1.0, 1.0, 1.0], "Hello world!");
 draw_text.queue_text(x, 350.0, 70.0, [0.51, 0.6, 0.74, 1.0], "Lenny: ( ͡° ͜ʖ ͡°)");
+draw_text.queue_text(50.0, 350.0, 70.0, [1.0, 1.0, 1.0, 1.0], "Overlap");
 ```
 
 Call update_text_cache on the AutoCommandBufferBuilder before render pass
 ```
-.update_text_cache(&mut draw_text)
+.update_text_cache(&mut draw_text, queue.clone())
 ```
 
 Call draw_text on the AutoCommandBufferBuilder during render pass.

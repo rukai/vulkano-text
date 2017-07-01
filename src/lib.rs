@@ -2,18 +2,16 @@
 #[macro_use] extern crate vulkano_shader_derive;
 extern crate rusttype;
 
-mod render_pass_desc;
-
 use rusttype::{Font, FontCollection, PositionedGlyph, Scale, Rect, point};
 use rusttype::gpu_cache::Cache;
 
 use vulkano::buffer::{CpuAccessibleBuffer, BufferUsage};
-use vulkano::command_buffer::{DynamicState, AutoCommandBufferBuilder, CommandBufferBuilder};
+use vulkano::command_buffer::{DynamicState, AutoCommandBufferBuilder};
 use vulkano::descriptor::descriptor_set::{SimpleDescriptorSet, SimpleDescriptorSetImg};
 use vulkano::descriptor::pipeline_layout::PipelineLayoutAbstract;
 use vulkano::device::{Device, Queue};
 use vulkano::format::R8Unorm;
-use vulkano::framebuffer::{Subpass, RenderPass, RenderPassDesc};
+use vulkano::framebuffer::{Subpass, RenderPassAbstract};
 use vulkano::image::SwapchainImage;
 use vulkano::image::immutable::ImmutableImage;
 use vulkano::pipeline::vertex::SingleBufferDefinition;
@@ -24,7 +22,6 @@ use vulkano::swapchain::Swapchain;
 
 use std::iter;
 use std::sync::Arc;
-use std::io::Write;
 
 #[derive(Debug, Clone)]
 struct Vertex {
@@ -59,13 +56,15 @@ pub struct DrawText<'a> {
     device:             Arc<Device>,
     font:               Font<'a>,
     cache:              Cache,
-    cache_width:        usize,
     cache_texture:      Arc<ImmutableImage<R8Unorm>>,
-    cache_pixel_buffer: Arc<CpuAccessibleBuffer<[u8]>>,
+    cache_pixel_buffer: Vec<u8>,
     set:                Arc<SimpleDescriptorSet<((), SimpleDescriptorSetImg<Arc<ImmutableImage<R8Unorm>>>)>>,
-    pipeline:           Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, Box<PipelineLayoutAbstract + Send + Sync>, Arc<RenderPass<render_pass_desc::Desc>>>>,
+    pipeline:           Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, Box<PipelineLayoutAbstract + Send + Sync>, Arc<RenderPassAbstract + Send + Sync>>>,
     texts:              Vec<TextData<'a>>,
 }
+
+const CACHE_WIDTH: usize = 1000;
+const CACHE_HEIGHT: usize = 1000;
 
 impl<'a> DrawText<'a> {
     pub fn new(device: Arc<Device>, queue: Arc<Queue>, swapchain: Arc<Swapchain>, images: &[Arc<SwapchainImage>]) -> DrawText<'a> {
@@ -73,22 +72,15 @@ impl<'a> DrawText<'a> {
         let collection = FontCollection::from_bytes(font_data as &[u8]);
         let font = collection.into_font().unwrap();
 
-        let vs = vs::Shader::load(&device).unwrap();
-        let fs = fs::Shader::load(&device).unwrap();
+        let vs = vs::Shader::load(device.clone()).unwrap();
+        let fs = fs::Shader::load(device.clone()).unwrap();
 
-        let (cache_width, cache_height) = (1024, 1024);
-        let cache = Cache::new(cache_width as u32, cache_height as u32, 0.1, 0.1);
-
-        let cache_pixel_buffer = CpuAccessibleBuffer::<[u8]>::from_iter(
-            device.clone(),
-            BufferUsage::all(),
-            Some(queue.family()),
-            (0..cache_width * cache_height).map(|_| 0)
-        ).unwrap();
+        let cache = Cache::new(CACHE_WIDTH as u32, CACHE_HEIGHT as u32, 0.1, 0.1);
+        let cache_pixel_buffer = vec!(0; CACHE_WIDTH * CACHE_HEIGHT);
 
         let cache_texture = vulkano::image::immutable::ImmutableImage::new(
             device.clone(),
-            vulkano::image::Dimensions::Dim2d { width: cache_width as u32, height: cache_height as u32 },
+            vulkano::image::Dimensions::Dim2d { width: CACHE_WIDTH as u32, height: CACHE_HEIGHT as u32 },
             vulkano::format::R8Unorm,
             Some(queue.family())
         ).unwrap();
@@ -104,9 +96,20 @@ impl<'a> DrawText<'a> {
             0.0, 1.0, 0.0, 0.0
         ).unwrap();
 
-        let render_pass = Arc::new(render_pass_desc::Desc {
-            color: (swapchain.format(), 1)
-        }.build_render_pass(device.clone()).unwrap());
+        let render_pass = Arc::new(single_pass_renderpass!(device.clone(),
+            attachments: {
+                color: {
+                    load: Load,
+                    store: Store,
+                    format: swapchain.format(),
+                    samples: 1,
+                }
+            },
+            pass: {
+                color: [color],
+                depth_stencil: {}
+            }
+        ).unwrap()) as Arc<RenderPassAbstract + Send + Sync>;
 
         let pipeline = Arc::new(GraphicsPipeline::start()
             .vertex_input_single_buffer()
@@ -135,7 +138,6 @@ impl<'a> DrawText<'a> {
             device:             device.clone(),
             font:               font,
             cache:              cache,
-            cache_width:        cache_width,
             cache_texture:      cache_texture,
             cache_pixel_buffer: cache_pixel_buffer,
             set:                set,
@@ -155,33 +157,47 @@ impl<'a> DrawText<'a> {
         });
     }
 
-    pub fn update_cache(&mut self, command_buffer: AutoCommandBufferBuilder) -> AutoCommandBufferBuilder {
+    pub fn update_cache(&mut self, command_buffer: AutoCommandBufferBuilder, queue: Arc<Queue>) -> AutoCommandBufferBuilder {
         // Use these as references to make the borrow checker happy
         let cache_pixel_buffer = &mut self.cache_pixel_buffer;
         let cache = &mut self.cache;
-        let cache_width = self.cache_width;
+        let mut dirty = false;
 
         cache.cache_queued(
-            |rect, tex_data| {
+            |rect, src_data| {
+                dirty = true;
                 let width = (rect.max.x - rect.min.x) as usize;
                 let height = (rect.max.y - rect.min.y) as usize;
-                let mut cache_lock = cache_pixel_buffer.write().unwrap();
-                let mut cache_location = rect.min.y as usize * cache_width + rect.min.x as usize;
+                let mut dst_index = rect.min.y as usize * CACHE_WIDTH + rect.min.x as usize;
+                let mut src_index = 0;
 
-                for line in 0..height {
-                    let mut cache_slice = &mut cache_lock[cache_location..];
-                    let start = line * width;
-                    let end   = (line + 1) * width;
-                    cache_slice.write(&tex_data[start..end]).unwrap();
-                    cache_location += cache_width;
+                for _ in 0..height {
+                    let dst_slice = &mut cache_pixel_buffer[dst_index..dst_index+width];
+                    let src_slice = &src_data[src_index..src_index+width];
+                    dst_slice.copy_from_slice(src_slice);
+
+                    dst_index += CACHE_WIDTH;
+                    src_index += width;
                 }
             }
         ).unwrap();
 
-        command_buffer.copy_buffer_to_image(
-            cache_pixel_buffer.clone(),
-            self.cache_texture.clone(),
-        ).unwrap()
+        if dirty {
+            let buffer = CpuAccessibleBuffer::<[u8]>::from_iter(
+                self.device.clone(),
+                BufferUsage::all(),
+                Some(queue.family()),
+                cache_pixel_buffer.iter().cloned()
+            ).unwrap();
+
+            command_buffer.copy_buffer_to_image(
+                buffer.clone(),
+                self.cache_texture.clone(),
+            ).unwrap()
+        }
+        else {
+            command_buffer
+        }
     }
 
     pub fn draw_text(&mut self, mut command_buffer_draw: AutoCommandBufferBuilder, queue: Arc<Queue>, screen_width: u32, screen_height: u32) -> AutoCommandBufferBuilder {
@@ -246,8 +262,8 @@ impl<'a> DrawText<'a> {
 }
 
 impl UpdateTextCache for AutoCommandBufferBuilder {
-    fn update_text_cache(self, data: &mut DrawText) -> AutoCommandBufferBuilder {
-        data.update_cache(self)
+    fn update_text_cache(self, data: &mut DrawText, queue: Arc<Queue>) -> AutoCommandBufferBuilder {
+        data.update_cache(self, queue)
     }
 }
 
@@ -258,7 +274,7 @@ impl DrawTextTrait for AutoCommandBufferBuilder {
 }
 
 pub trait UpdateTextCache {
-    fn update_text_cache(self, data: &mut DrawText) -> AutoCommandBufferBuilder;
+    fn update_text_cache(self, data: &mut DrawText, queue: Arc<Queue>) -> AutoCommandBufferBuilder;
 }
 
 pub trait DrawTextTrait {

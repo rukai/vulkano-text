@@ -13,7 +13,7 @@ use vulkano::device::{Device, Queue};
 use vulkano::format::R8Unorm;
 use vulkano::framebuffer::{Subpass, RenderPassAbstract};
 use vulkano::image::SwapchainImage;
-use vulkano::image::immutable::ImmutableImage;
+use vulkano::image::StorageImage;
 use vulkano::pipeline::vertex::SingleBufferDefinition;
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::pipeline::GraphicsPipeline;
@@ -56,9 +56,9 @@ pub struct DrawText<'a> {
     device:             Arc<Device>,
     font:               Font<'a>,
     cache:              Cache,
-    cache_texture:      Arc<ImmutableImage<R8Unorm>>,
+    cache_texture:      Arc<StorageImage<R8Unorm>>,
     cache_pixel_buffer: Vec<u8>,
-    set:                Arc<SimpleDescriptorSet<((), SimpleDescriptorSetImg<Arc<ImmutableImage<R8Unorm>>>)>>,
+    set:                Arc<SimpleDescriptorSet<((), SimpleDescriptorSetImg<Arc<StorageImage<R8Unorm>>>)>>,
     pipeline:           Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, Box<PipelineLayoutAbstract + Send + Sync>, Arc<RenderPassAbstract + Send + Sync>>>,
     texts:              Vec<TextData<'a>>,
 }
@@ -78,7 +78,7 @@ impl<'a> DrawText<'a> {
         let cache = Cache::new(CACHE_WIDTH as u32, CACHE_HEIGHT as u32, 0.1, 0.1);
         let cache_pixel_buffer = vec!(0; CACHE_WIDTH * CACHE_HEIGHT);
 
-        let cache_texture = vulkano::image::immutable::ImmutableImage::new(
+        let cache_texture = StorageImage::new(
             device.clone(),
             vulkano::image::Dimensions::Dim2d { width: CACHE_WIDTH as u32, height: CACHE_HEIGHT as u32 },
             vulkano::format::R8Unorm,

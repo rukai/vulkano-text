@@ -203,7 +203,6 @@ void main() {
 
         let future = previous_frame_end.join(acquire_future)
             .then_execute(queue.clone(), command_buffer).unwrap()
-
             .then_swapchain_present(queue.clone(), swapchain.clone(), image_num)
             .then_signal_fence_and_flush().unwrap();
         previous_frame_end = Box::new(future) as Box<_>;

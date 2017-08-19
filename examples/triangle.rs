@@ -80,7 +80,7 @@ fn main() {
         struct Vertex { position: [f32; 2] }
         impl_vertex!(Vertex, position);
 
-        CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), Some(queue.family()), [
+        CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), [
             // BIGGER TRIANGLE
             Vertex { position: [-1.0, 0.5] },
             Vertex { position: [0.0, -1.0] },
@@ -188,14 +188,14 @@ void main() {
         let (image_num, acquire_future) = swapchain::acquire_next_image(swapchain.clone(), None).unwrap();
         let command_buffer = AutoCommandBufferBuilder::new(device.clone(), queue.family()).unwrap()
             // UNIQUE CODE: update DrawTextData internal cache
-            .update_text_cache(&mut draw_text, queue.clone())
+            .update_text_cache(&mut draw_text)
             // UNIQUE CODE END
 
             .begin_render_pass(framebuffers[image_num].clone(), false, vec![[0.0, 0.0, 0.0, 1.0].into()]).unwrap() // CHANGED TO BLACK BACKGROUND
             .draw(pipeline.clone(), DynamicState::none(), vertex_buffer.clone(), (), ()).unwrap()
 
             // UNIQUE CODE: draw the text
-            .draw_text(&mut draw_text, queue.clone(), width, height)
+            .draw_text(&mut draw_text, width, height)
             // UNIQUE CODE END
 
             .end_render_pass().unwrap()

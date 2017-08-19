@@ -1,4 +1,4 @@
-# Vulkano Text
+# Vulkano Text [![](https://img.shields.io/crates/v/vulkano_text.svg)](https://crates.io/crates/vulkano-text)
 
 Render text with the DejaVu font using the Vulkano library.
 
@@ -6,12 +6,7 @@ Render text with the DejaVu font using the Vulkano library.
 
 ## Usage:
 
-Add to your Cargo.toml: 
-```
-vulkano_text = "0.2"
-```
-
-Below are relevant lines taken from [window.rs](examples/window.rs)
+Below are relevant lines taken from the [triangle.rs](examples/triangle.rs) example.
 
 Import the library:
 ```
@@ -34,12 +29,12 @@ draw_text.queue_text(50.0, 350.0, 70.0, [1.0, 1.0, 1.0, 1.0], "Overlap");
 
 Call update_text_cache on the AutoCommandBufferBuilder before render pass
 ```
-.update_text_cache(&mut draw_text, queue.clone())
+.update_text_cache(&mut draw_text)
 ```
 
 Call draw_text on the AutoCommandBufferBuilder during render pass.
 ```
-.draw_text(&mut draw_text, queue.clone(), width, height)
+.draw_text(&mut draw_text, width, height)
 ```
 
 Result:

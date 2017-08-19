@@ -7,7 +7,7 @@ use rusttype::gpu_cache::Cache;
 
 use vulkano::buffer::{CpuAccessibleBuffer, BufferUsage};
 use vulkano::command_buffer::{DynamicState, AutoCommandBufferBuilder};
-use vulkano::descriptor::descriptor_set::{SimpleDescriptorSet, SimpleDescriptorSetImg};
+use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet, DescriptorSet};
 use vulkano::descriptor::pipeline_layout::PipelineLayoutAbstract;
 use vulkano::device::{Device, Queue};
 use vulkano::format::R8Unorm;
@@ -58,7 +58,8 @@ pub struct DrawText<'a> {
     cache:              Cache,
     cache_texture:      Arc<StorageImage<R8Unorm>>,
     cache_pixel_buffer: Vec<u8>,
-    set:                Arc<SimpleDescriptorSet<((), SimpleDescriptorSetImg<Arc<StorageImage<R8Unorm>>>)>>,
+    //set:                Arc<SimpleDescriptorSet<((), SimpleDescriptorSetImg<Arc<StorageImage<R8Unorm>>>)>>,
+    set:                Arc<DescriptorSet + Send + Sync>,
     pipeline:           Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, Box<PipelineLayoutAbstract + Send + Sync>, Arc<RenderPassAbstract + Send + Sync>>>,
     texts:              Vec<TextData<'a>>,
 }
@@ -130,9 +131,11 @@ impl<'a> DrawText<'a> {
             .unwrap()
         );
 
-        let set = Arc::new(simple_descriptor_set!(pipeline.clone(), 0, {
-            tex: (cache_texture.clone(), sampler.clone())
-        }));
+        let set = Arc::new(
+            PersistentDescriptorSet::start(pipeline.clone(), 0)
+            .add_sampled_image(cache_texture.clone(), sampler.clone()).unwrap()
+            .build().unwrap()
+        ) as Arc<DescriptorSet + Send + Sync>;
 
         DrawText {
             device:             device.clone(),
@@ -157,7 +160,7 @@ impl<'a> DrawText<'a> {
         });
     }
 
-    pub fn update_cache(&mut self, command_buffer: AutoCommandBufferBuilder, queue: Arc<Queue>) -> AutoCommandBufferBuilder {
+    pub fn update_cache(&mut self, command_buffer: AutoCommandBufferBuilder) -> AutoCommandBufferBuilder {
         // Use these as references to make the borrow checker happy
         let cache_pixel_buffer = &mut self.cache_pixel_buffer;
         let cache = &mut self.cache;
@@ -186,7 +189,6 @@ impl<'a> DrawText<'a> {
             let buffer = CpuAccessibleBuffer::<[u8]>::from_iter(
                 self.device.clone(),
                 BufferUsage::all(),
-                Some(queue.family()),
                 cache_pixel_buffer.iter().cloned()
             ).unwrap();
 
@@ -200,7 +202,7 @@ impl<'a> DrawText<'a> {
         }
     }
 
-    pub fn draw_text(&mut self, mut command_buffer_draw: AutoCommandBufferBuilder, queue: Arc<Queue>, screen_width: u32, screen_height: u32) -> AutoCommandBufferBuilder {
+    pub fn draw_text(&mut self, mut command_buffer_draw: AutoCommandBufferBuilder, screen_width: u32, screen_height: u32) -> AutoCommandBufferBuilder {
         let cache = &mut self.cache;
         for text in &mut self.texts.drain(..) {
             let vertices: Vec<Vertex> = text.glyphs.iter().flat_map(|g| {
@@ -254,7 +256,7 @@ impl<'a> DrawText<'a> {
                 }
             }).collect();
 
-            let vertex_buffer = CpuAccessibleBuffer::from_iter(self.device.clone(), BufferUsage::all(), Some(queue.family()), vertices.into_iter()).unwrap();
+            let vertex_buffer = CpuAccessibleBuffer::from_iter(self.device.clone(), BufferUsage::all(), vertices.into_iter()).unwrap();
             command_buffer_draw = command_buffer_draw.draw(self.pipeline.clone(), DynamicState::none(), vertex_buffer.clone(), self.set.clone(), ()).unwrap();
         }
         command_buffer_draw
@@ -262,21 +264,21 @@ impl<'a> DrawText<'a> {
 }
 
 impl UpdateTextCache for AutoCommandBufferBuilder {
-    fn update_text_cache(self, data: &mut DrawText, queue: Arc<Queue>) -> AutoCommandBufferBuilder {
-        data.update_cache(self, queue)
+    fn update_text_cache(self, data: &mut DrawText) -> AutoCommandBufferBuilder {
+        data.update_cache(self)
     }
 }
 
 impl DrawTextTrait for AutoCommandBufferBuilder {
-    fn draw_text(self, data: &mut DrawText, queue: Arc<Queue>, screen_width: u32, screen_height: u32) -> AutoCommandBufferBuilder {
-        data.draw_text(self, queue, screen_width, screen_height)
+    fn draw_text(self, data: &mut DrawText, screen_width: u32, screen_height: u32) -> AutoCommandBufferBuilder {
+        data.draw_text(self, screen_width, screen_height)
     }
 }
 
 pub trait UpdateTextCache {
-    fn update_text_cache(self, data: &mut DrawText, queue: Arc<Queue>) -> AutoCommandBufferBuilder;
+    fn update_text_cache(self, data: &mut DrawText) -> AutoCommandBufferBuilder;
 }
 
 pub trait DrawTextTrait {
-    fn draw_text(self, data: &mut DrawText, queue: Arc<Queue>, screen_width: u32, screen_height: u32) -> AutoCommandBufferBuilder;
+    fn draw_text(self, data: &mut DrawText, screen_width: u32, screen_height: u32) -> AutoCommandBufferBuilder;
 }

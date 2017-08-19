@@ -58,7 +58,6 @@ pub struct DrawText<'a> {
     cache:              Cache,
     cache_texture:      Arc<StorageImage<R8Unorm>>,
     cache_pixel_buffer: Vec<u8>,
-    //set:                Arc<SimpleDescriptorSet<((), SimpleDescriptorSetImg<Arc<StorageImage<R8Unorm>>>)>>,
     set:                Arc<DescriptorSet + Send + Sync>,
     pipeline:           Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, Box<PipelineLayoutAbstract + Send + Sync>, Arc<RenderPassAbstract + Send + Sync>>>,
     texts:              Vec<TextData<'a>>,

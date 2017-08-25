@@ -12,8 +12,7 @@ use vulkano::descriptor::pipeline_layout::PipelineLayoutAbstract;
 use vulkano::device::{Device, Queue};
 use vulkano::format::R8Unorm;
 use vulkano::framebuffer::{Subpass, RenderPassAbstract};
-use vulkano::image::SwapchainImage;
-use vulkano::image::StorageImage;
+use vulkano::image::{SwapchainImage, ImmutableImage, ImageUsage, ImageLayout, Dimensions};
 use vulkano::pipeline::vertex::SingleBufferDefinition;
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::pipeline::GraphicsPipeline;
@@ -54,11 +53,11 @@ struct TextData<'a> {
 
 pub struct DrawText<'a> {
     device:             Arc<Device>,
+    queue:              Arc<Queue>,
     font:               Font<'a>,
     cache:              Cache,
-    cache_texture:      Arc<StorageImage<R8Unorm>>,
     cache_pixel_buffer: Vec<u8>,
-    set:                Arc<DescriptorSet + Send + Sync>,
+    set:                Option<Arc<DescriptorSet + Send + Sync>>,
     pipeline:           Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, Box<PipelineLayoutAbstract + Send + Sync>, Arc<RenderPassAbstract + Send + Sync>>>,
     texts:              Vec<TextData<'a>>,
 }
@@ -77,24 +76,6 @@ impl<'a> DrawText<'a> {
 
         let cache = Cache::new(CACHE_WIDTH as u32, CACHE_HEIGHT as u32, 0.1, 0.1);
         let cache_pixel_buffer = vec!(0; CACHE_WIDTH * CACHE_HEIGHT);
-
-        let cache_texture = StorageImage::new(
-            device.clone(),
-            vulkano::image::Dimensions::Dim2d { width: CACHE_WIDTH as u32, height: CACHE_HEIGHT as u32 },
-            vulkano::format::R8Unorm,
-            Some(queue.family())
-        ).unwrap();
-
-        let sampler = Sampler::new(
-            device.clone(),
-            Filter::Linear,
-            Filter::Linear,
-            MipmapMode::Nearest,
-            SamplerAddressMode::Repeat,
-            SamplerAddressMode::Repeat,
-            SamplerAddressMode::Repeat,
-            0.0, 1.0, 0.0, 0.0
-        ).unwrap();
 
         let render_pass = Arc::new(single_pass_renderpass!(device.clone(),
             attachments: {
@@ -130,19 +111,13 @@ impl<'a> DrawText<'a> {
             .unwrap()
         );
 
-        let set = Arc::new(
-            PersistentDescriptorSet::start(pipeline.clone(), 0)
-            .add_sampled_image(cache_texture.clone(), sampler.clone()).unwrap()
-            .build().unwrap()
-        ) as Arc<DescriptorSet + Send + Sync>;
-
         DrawText {
             device:             device.clone(),
+            queue:              queue,
             font:               font,
             cache:              cache,
-            cache_texture:      cache_texture,
             cache_pixel_buffer: cache_pixel_buffer,
-            set:                set,
+            set:                None,
             pipeline:           pipeline,
             texts:              vec!(),
         }
@@ -163,11 +138,9 @@ impl<'a> DrawText<'a> {
         // Use these as references to make the borrow checker happy
         let cache_pixel_buffer = &mut self.cache_pixel_buffer;
         let cache = &mut self.cache;
-        let mut dirty = false;
 
         cache.cache_queued(
             |rect, src_data| {
-                dirty = true;
                 let width = (rect.max.x - rect.min.x) as usize;
                 let height = (rect.max.y - rect.min.y) as usize;
                 let mut dst_index = rect.min.y as usize * CACHE_WIDTH + rect.min.x as usize;
@@ -184,79 +157,126 @@ impl<'a> DrawText<'a> {
             }
         ).unwrap();
 
-        if dirty {
-            let buffer = CpuAccessibleBuffer::<[u8]>::from_iter(
-                self.device.clone(),
-                BufferUsage::all(),
-                cache_pixel_buffer.iter().cloned()
-            ).unwrap();
+        let buffer = CpuAccessibleBuffer::<[u8]>::from_iter(
+            self.device.clone(),
+            BufferUsage::all(),
+            cache_pixel_buffer.iter().cloned()
+        ).unwrap();
 
-            command_buffer.copy_buffer_to_image(
-                buffer.clone(),
-                self.cache_texture.clone(),
-            ).unwrap()
-        }
-        else {
-            command_buffer
-        }
+        let (cache_texture, cache_texture_write) = ImmutableImage::uninitialized(
+            self.device.clone(),
+            Dimensions::Dim2d { width: CACHE_WIDTH as u32, height: CACHE_HEIGHT as u32 },
+            R8Unorm,
+            1,
+            ImageUsage {
+                sampled: true,
+                transfer_destination: true,
+                .. ImageUsage::none()
+            },
+            ImageLayout::General,
+            Some(self.queue.family())
+        ).unwrap();
+
+        let sampler = Sampler::new(
+            self.device.clone(),
+            Filter::Linear,
+            Filter::Linear,
+            MipmapMode::Nearest,
+            SamplerAddressMode::Repeat,
+            SamplerAddressMode::Repeat,
+            SamplerAddressMode::Repeat,
+            0.0, 1.0, 0.0, 0.0
+        ).unwrap();
+
+        self.set = Some(Arc::new(
+            PersistentDescriptorSet::start(self.pipeline.clone(), 0)
+            .add_sampled_image(cache_texture.clone(), sampler).unwrap()
+            .build().unwrap()
+        ));
+
+        command_buffer.copy_buffer_to_image(
+            buffer.clone(),
+            cache_texture_write,
+        ).unwrap()
     }
+
+        //if dirty {
+        //    let buffer = CpuAccessibleBuffer::<[u8]>::from_iter(
+        //        self.device.clone(),
+        //        BufferUsage::all(),
+        //        cache_pixel_buffer.iter().cloned()
+        //    ).unwrap();
+
+        //    command_buffer.copy_buffer_to_image(
+        //        buffer.clone(),
+        //        self.cache_texture.clone(),
+        //    ).unwrap()
+        //}
+        //else {
+        //    command_buffer
+        //}
 
     pub fn draw_text(&mut self, mut command_buffer_draw: AutoCommandBufferBuilder, screen_width: u32, screen_height: u32) -> AutoCommandBufferBuilder {
         let cache = &mut self.cache;
-        for text in &mut self.texts.drain(..) {
-            let vertices: Vec<Vertex> = text.glyphs.iter().flat_map(|g| {
-                if let Ok(Some((uv_rect, screen_rect))) = cache.rect_for(0, g) {
-                    let gl_rect = Rect {
-                        min: point(
-                            (screen_rect.min.x as f32 / screen_width  as f32 - 0.5) * 2.0,
-                            (screen_rect.min.y as f32 / screen_height as f32 - 0.5) * 2.0
-                        ),
-                        max: point(
-                           (screen_rect.max.x as f32 / screen_width  as f32 - 0.5) * 2.0,
-                           (screen_rect.max.y as f32 / screen_height as f32 - 0.5) * 2.0
-                        )
-                    };
-                    vec!(
-                        Vertex {
-                            position:     [gl_rect.min.x, gl_rect.max.y],
-                            tex_position: [uv_rect.min.x, uv_rect.max.y],
-                            color:        text.color,
-                        },
-                        Vertex {
-                            position:     [gl_rect.min.x, gl_rect.min.y],
-                            tex_position: [uv_rect.min.x, uv_rect.min.y],
-                            color:        text.color,
-                        },
-                        Vertex {
-                            position:     [gl_rect.max.x, gl_rect.min.y],
-                            tex_position: [uv_rect.max.x, uv_rect.min.y],
-                            color:        text.color,
-                        },
+        if let Some(set) = self.set.take() {
+            for text in &mut self.texts.drain(..) {
+                let vertices: Vec<Vertex> = text.glyphs.iter().flat_map(|g| {
+                    if let Ok(Some((uv_rect, screen_rect))) = cache.rect_for(0, g) {
+                        let gl_rect = Rect {
+                            min: point(
+                                (screen_rect.min.x as f32 / screen_width  as f32 - 0.5) * 2.0,
+                                (screen_rect.min.y as f32 / screen_height as f32 - 0.5) * 2.0
+                            ),
+                            max: point(
+                               (screen_rect.max.x as f32 / screen_width  as f32 - 0.5) * 2.0,
+                               (screen_rect.max.y as f32 / screen_height as f32 - 0.5) * 2.0
+                            )
+                        };
+                        vec!(
+                            Vertex {
+                                position:     [gl_rect.min.x, gl_rect.max.y],
+                                tex_position: [uv_rect.min.x, uv_rect.max.y],
+                                color:        text.color,
+                            },
+                            Vertex {
+                                position:     [gl_rect.min.x, gl_rect.min.y],
+                                tex_position: [uv_rect.min.x, uv_rect.min.y],
+                                color:        text.color,
+                            },
+                            Vertex {
+                                position:     [gl_rect.max.x, gl_rect.min.y],
+                                tex_position: [uv_rect.max.x, uv_rect.min.y],
+                                color:        text.color,
+                            },
 
-                        Vertex {
-                            position:     [gl_rect.max.x, gl_rect.min.y],
-                            tex_position: [uv_rect.max.x, uv_rect.min.y],
-                            color:        text.color,
-                        },
-                        Vertex {
-                            position:     [gl_rect.max.x, gl_rect.max.y],
-                            tex_position: [uv_rect.max.x, uv_rect.max.y],
-                            color:        text.color,
-                        },
-                        Vertex {
-                            position:     [gl_rect.min.x, gl_rect.max.y],
-                            tex_position: [uv_rect.min.x, uv_rect.max.y],
-                            color:        text.color,
-                        },
-                    ).into_iter()
-                }
-                else {
-                    vec!().into_iter()
-                }
-            }).collect();
+                            Vertex {
+                                position:     [gl_rect.max.x, gl_rect.min.y],
+                                tex_position: [uv_rect.max.x, uv_rect.min.y],
+                                color:        text.color,
+                            },
+                            Vertex {
+                                position:     [gl_rect.max.x, gl_rect.max.y],
+                                tex_position: [uv_rect.max.x, uv_rect.max.y],
+                                color:        text.color,
+                            },
+                            Vertex {
+                                position:     [gl_rect.min.x, gl_rect.max.y],
+                                tex_position: [uv_rect.min.x, uv_rect.max.y],
+                                color:        text.color,
+                            },
+                        ).into_iter()
+                    }
+                    else {
+                        vec!().into_iter()
+                    }
+                }).collect();
 
-            let vertex_buffer = CpuAccessibleBuffer::from_iter(self.device.clone(), BufferUsage::all(), vertices.into_iter()).unwrap();
-            command_buffer_draw = command_buffer_draw.draw(self.pipeline.clone(), DynamicState::none(), vertex_buffer.clone(), self.set.clone(), ()).unwrap();
+                let vertex_buffer = CpuAccessibleBuffer::from_iter(self.device.clone(), BufferUsage::all(), vertices.into_iter()).unwrap();
+
+                command_buffer_draw = command_buffer_draw.draw(self.pipeline.clone(), DynamicState::none(), vertex_buffer.clone(), set.clone(), ()).unwrap();
+            }
+        } else {
+            panic!("Need to update cache before drawing");
         }
         command_buffer_draw
     }

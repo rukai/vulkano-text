@@ -4,19 +4,21 @@ extern crate winit;
 extern crate vulkano_win;
 
 extern crate vulkano_text;
-use vulkano_text::{DrawText, DrawTextTrait, UpdateTextCache};
+use vulkano_text::{DrawText, DrawTextTrait};
 
-use vulkano_win::VkSurfaceBuild;
 use vulkano::command_buffer::AutoCommandBufferBuilder;
 use vulkano::device::Device;
+use vulkano::format::Format;
 use vulkano::framebuffer::Framebuffer;
+use vulkano::image::attachment::AttachmentImage;
 use vulkano::instance::Instance;
-use vulkano::swapchain;
 use vulkano::swapchain::PresentMode;
 use vulkano::swapchain::SurfaceTransform;
 use vulkano::swapchain::Swapchain;
-use vulkano::sync::now;
+use vulkano::swapchain;
 use vulkano::sync::GpuFuture;
+use vulkano::sync::now;
+use vulkano_win::VkSurfaceBuild;
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -139,6 +141,7 @@ fn main() {
                        None).expect("failed to create swapchain")
     };
 
+    // include a depth buffer (unlike triangle.rs) to ensure vulkano-text isnt dependent on a specific render_pass
     let render_pass = Arc::new(single_pass_renderpass!(device.clone(),
         attachments: {
             color: {
@@ -146,23 +149,31 @@ fn main() {
                 store: Store,
                 format: swapchain.format(),
                 samples: 1,
+            },
+            depth: {
+                load: Clear,
+                store: DontCare,
+                format: Format::D16Unorm,
+                samples: 1,
             }
         },
         pass: {
             color: [color],
-            depth_stencil: {}
+            depth_stencil: {depth}
         }
     ).unwrap());
 
+    let depthbuffer = AttachmentImage::transient(device.clone(), images[0].dimensions(), Format::D16Unorm).unwrap();
     let framebuffers = images.iter().map(|image| {
         Arc::new(Framebuffer::start(render_pass.clone())
             .add(image.clone()).unwrap()
+            .add(depthbuffer.clone()).unwrap()
             .build().unwrap())
     }).collect::<Vec<_>>();
 
     let mut draw_text = DrawText::new(device.clone(), queue.clone(), swapchain.clone(), &images);
 
-    let (width, height) = window.window().get_inner_size_points().unwrap();
+    let (width, _) = window.window().get_inner_size_points().unwrap();
     let mut x = 0.0;
 
     let mut previous_frame_end = Box::new(now(device.clone())) as Box<GpuFuture>;
@@ -186,10 +197,9 @@ fn main() {
 
         let (image_num, acquire_future) = swapchain::acquire_next_image(swapchain.clone(), None).unwrap();
         let command_buffer = AutoCommandBufferBuilder::new(device.clone(), queue.family()).unwrap()
-            .update_text_cache(&mut draw_text)
-            .begin_render_pass(framebuffers[image_num].clone(), false, vec![[0.0, 0.0, 0.0, 1.0].into()]).unwrap()
-            .draw_text(&mut draw_text, width, height)
+            .begin_render_pass(framebuffers[image_num].clone(), false, vec![[0.0, 0.0, 0.0, 1.0].into(), 1f32.into()]).unwrap()
             .end_render_pass().unwrap()
+            .draw_text(&mut draw_text, image_num)
             .build().unwrap();
 
         let future = previous_frame_end.join(acquire_future)

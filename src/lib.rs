@@ -7,11 +7,11 @@ use rusttype::gpu_cache::Cache;
 
 use vulkano::buffer::{CpuAccessibleBuffer, BufferUsage};
 use vulkano::command_buffer::{DynamicState, AutoCommandBufferBuilder};
-use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet, DescriptorSet};
+use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet};
 use vulkano::descriptor::pipeline_layout::PipelineLayoutAbstract;
 use vulkano::device::{Device, Queue};
 use vulkano::format::R8Unorm;
-use vulkano::framebuffer::{Subpass, RenderPassAbstract};
+use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, Subpass, RenderPassAbstract};
 use vulkano::image::{SwapchainImage, ImmutableImage, ImageUsage, ImageLayout, Dimensions};
 use vulkano::pipeline::vertex::SingleBufferDefinition;
 use vulkano::pipeline::viewport::Viewport;
@@ -57,8 +57,8 @@ pub struct DrawText<'a> {
     font:               Font<'a>,
     cache:              Cache,
     cache_pixel_buffer: Vec<u8>,
-    set:                Option<Arc<DescriptorSet + Send + Sync>>,
     pipeline:           Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, Box<PipelineLayoutAbstract + Send + Sync>, Arc<RenderPassAbstract + Send + Sync>>>,
+    framebuffers:       Vec<Arc<FramebufferAbstract + Send + Sync>>,
     texts:              Vec<TextData<'a>>,
 }
 
@@ -92,6 +92,14 @@ impl<'a> DrawText<'a> {
             }
         ).unwrap()) as Arc<RenderPassAbstract + Send + Sync>;
 
+        let framebuffers = images.iter().map(|image| {
+            Arc::new(
+                Framebuffer::start(render_pass.clone())
+                .add(image.clone()).unwrap()
+                .build().unwrap()
+            ) as Arc<FramebufferAbstract + Send + Sync>
+        }).collect::<Vec<_>>();
+
         let pipeline = Arc::new(GraphicsPipeline::start()
             .vertex_input_single_buffer()
             .vertex_shader(vs.main_entry_point(), ())
@@ -112,14 +120,14 @@ impl<'a> DrawText<'a> {
         );
 
         DrawText {
-            device:             device.clone(),
-            queue:              queue,
-            font:               font,
-            cache:              cache,
-            cache_pixel_buffer: cache_pixel_buffer,
-            set:                None,
-            pipeline:           pipeline,
-            texts:              vec!(),
+            device: device.clone(),
+            queue,
+            font,
+            cache,
+            cache_pixel_buffer,
+            pipeline,
+            framebuffers,
+            texts: vec!(),
         }
     }
 
@@ -134,11 +142,13 @@ impl<'a> DrawText<'a> {
         });
     }
 
-    pub fn update_cache(&mut self, command_buffer: AutoCommandBufferBuilder) -> AutoCommandBufferBuilder {
-        // Use these as references to make the borrow checker happy
+    pub fn draw_text(&mut self, command_buffer: AutoCommandBufferBuilder, image_num: usize) -> AutoCommandBufferBuilder {
+        let screen_width  = self.framebuffers[image_num].dimensions()[0];
+        let screen_height = self.framebuffers[image_num].dimensions()[1];
         let cache_pixel_buffer = &mut self.cache_pixel_buffer;
         let cache = &mut self.cache;
 
+        // update texture cache
         cache.cache_queued(
             |rect, src_data| {
                 let width = (rect.max.x - rect.min.x) as usize;
@@ -188,116 +198,86 @@ impl<'a> DrawText<'a> {
             0.0, 1.0, 0.0, 0.0
         ).unwrap();
 
-        self.set = Some(Arc::new(
+        let set = Arc::new(
             PersistentDescriptorSet::start(self.pipeline.clone(), 0)
             .add_sampled_image(cache_texture.clone(), sampler).unwrap()
             .build().unwrap()
-        ));
+        );
 
-        command_buffer.copy_buffer_to_image(
-            buffer.clone(),
-            cache_texture_write,
-        ).unwrap()
-    }
+        let mut command_buffer = command_buffer
+            .copy_buffer_to_image(
+                buffer.clone(),
+                cache_texture_write,
+            ).unwrap()
+            .begin_render_pass(self.framebuffers[image_num].clone(), false, vec!()).unwrap();
 
-        //if dirty {
-        //    let buffer = CpuAccessibleBuffer::<[u8]>::from_iter(
-        //        self.device.clone(),
-        //        BufferUsage::all(),
-        //        cache_pixel_buffer.iter().cloned()
-        //    ).unwrap();
+        // draw
+        for text in &mut self.texts.drain(..) {
+            let vertices: Vec<Vertex> = text.glyphs.iter().flat_map(|g| {
+                if let Ok(Some((uv_rect, screen_rect))) = cache.rect_for(0, g) {
+                    let gl_rect = Rect {
+                        min: point(
+                            (screen_rect.min.x as f32 / screen_width  as f32 - 0.5) * 2.0,
+                            (screen_rect.min.y as f32 / screen_height as f32 - 0.5) * 2.0
+                        ),
+                        max: point(
+                           (screen_rect.max.x as f32 / screen_width  as f32 - 0.5) * 2.0,
+                           (screen_rect.max.y as f32 / screen_height as f32 - 0.5) * 2.0
+                        )
+                    };
+                    vec!(
+                        Vertex {
+                            position:     [gl_rect.min.x, gl_rect.max.y],
+                            tex_position: [uv_rect.min.x, uv_rect.max.y],
+                            color:        text.color,
+                        },
+                        Vertex {
+                            position:     [gl_rect.min.x, gl_rect.min.y],
+                            tex_position: [uv_rect.min.x, uv_rect.min.y],
+                            color:        text.color,
+                        },
+                        Vertex {
+                            position:     [gl_rect.max.x, gl_rect.min.y],
+                            tex_position: [uv_rect.max.x, uv_rect.min.y],
+                            color:        text.color,
+                        },
 
-        //    command_buffer.copy_buffer_to_image(
-        //        buffer.clone(),
-        //        self.cache_texture.clone(),
-        //    ).unwrap()
-        //}
-        //else {
-        //    command_buffer
-        //}
+                        Vertex {
+                            position:     [gl_rect.max.x, gl_rect.min.y],
+                            tex_position: [uv_rect.max.x, uv_rect.min.y],
+                            color:        text.color,
+                        },
+                        Vertex {
+                            position:     [gl_rect.max.x, gl_rect.max.y],
+                            tex_position: [uv_rect.max.x, uv_rect.max.y],
+                            color:        text.color,
+                        },
+                        Vertex {
+                            position:     [gl_rect.min.x, gl_rect.max.y],
+                            tex_position: [uv_rect.min.x, uv_rect.max.y],
+                            color:        text.color,
+                        },
+                    ).into_iter()
+                }
+                else {
+                    vec!().into_iter()
+                }
+            }).collect();
 
-    pub fn draw_text(&mut self, mut command_buffer_draw: AutoCommandBufferBuilder, screen_width: u32, screen_height: u32) -> AutoCommandBufferBuilder {
-        let cache = &mut self.cache;
-        if let Some(set) = self.set.take() {
-            for text in &mut self.texts.drain(..) {
-                let vertices: Vec<Vertex> = text.glyphs.iter().flat_map(|g| {
-                    if let Ok(Some((uv_rect, screen_rect))) = cache.rect_for(0, g) {
-                        let gl_rect = Rect {
-                            min: point(
-                                (screen_rect.min.x as f32 / screen_width  as f32 - 0.5) * 2.0,
-                                (screen_rect.min.y as f32 / screen_height as f32 - 0.5) * 2.0
-                            ),
-                            max: point(
-                               (screen_rect.max.x as f32 / screen_width  as f32 - 0.5) * 2.0,
-                               (screen_rect.max.y as f32 / screen_height as f32 - 0.5) * 2.0
-                            )
-                        };
-                        vec!(
-                            Vertex {
-                                position:     [gl_rect.min.x, gl_rect.max.y],
-                                tex_position: [uv_rect.min.x, uv_rect.max.y],
-                                color:        text.color,
-                            },
-                            Vertex {
-                                position:     [gl_rect.min.x, gl_rect.min.y],
-                                tex_position: [uv_rect.min.x, uv_rect.min.y],
-                                color:        text.color,
-                            },
-                            Vertex {
-                                position:     [gl_rect.max.x, gl_rect.min.y],
-                                tex_position: [uv_rect.max.x, uv_rect.min.y],
-                                color:        text.color,
-                            },
-
-                            Vertex {
-                                position:     [gl_rect.max.x, gl_rect.min.y],
-                                tex_position: [uv_rect.max.x, uv_rect.min.y],
-                                color:        text.color,
-                            },
-                            Vertex {
-                                position:     [gl_rect.max.x, gl_rect.max.y],
-                                tex_position: [uv_rect.max.x, uv_rect.max.y],
-                                color:        text.color,
-                            },
-                            Vertex {
-                                position:     [gl_rect.min.x, gl_rect.max.y],
-                                tex_position: [uv_rect.min.x, uv_rect.max.y],
-                                color:        text.color,
-                            },
-                        ).into_iter()
-                    }
-                    else {
-                        vec!().into_iter()
-                    }
-                }).collect();
-
-                let vertex_buffer = CpuAccessibleBuffer::from_iter(self.device.clone(), BufferUsage::all(), vertices.into_iter()).unwrap();
-
-                command_buffer_draw = command_buffer_draw.draw(self.pipeline.clone(), DynamicState::none(), vertex_buffer.clone(), set.clone(), ()).unwrap();
-            }
-        } else {
-            panic!("Need to update cache before drawing");
+            let vertex_buffer = CpuAccessibleBuffer::from_iter(self.device.clone(), BufferUsage::all(), vertices.into_iter()).unwrap();
+            command_buffer = command_buffer.draw(self.pipeline.clone(), DynamicState::none(), vertex_buffer.clone(), set.clone(), ()).unwrap();
         }
-        command_buffer_draw
-    }
-}
 
-impl UpdateTextCache for AutoCommandBufferBuilder {
-    fn update_text_cache(self, data: &mut DrawText) -> AutoCommandBufferBuilder {
-        data.update_cache(self)
+        command_buffer.end_render_pass().unwrap()
     }
 }
 
 impl DrawTextTrait for AutoCommandBufferBuilder {
-    fn draw_text(self, data: &mut DrawText, screen_width: u32, screen_height: u32) -> AutoCommandBufferBuilder {
-        data.draw_text(self, screen_width, screen_height)
+    fn draw_text(self, data: &mut DrawText, image_num: usize) -> AutoCommandBufferBuilder {
+        data.draw_text(self, image_num)
     }
 }
 
-pub trait UpdateTextCache {
-    fn update_text_cache(self, data: &mut DrawText) -> AutoCommandBufferBuilder;
-}
-
 pub trait DrawTextTrait {
-    fn draw_text(self, data: &mut DrawText, screen_width: u32, screen_height: u32) -> AutoCommandBufferBuilder;
+    fn draw_text(self, data: &mut DrawText, image_num: usize) -> AutoCommandBufferBuilder;
 }

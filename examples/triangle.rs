@@ -10,7 +10,7 @@ extern crate vulkano_win;
 
 // UNIQUE CODE: use
 extern crate vulkano_text;
-use vulkano_text::{DrawText, DrawTextTrait, UpdateTextCache};
+use vulkano_text::{DrawText, DrawTextTrait};
 // UNIQUE CODE END
 
 use vulkano_win::VkSurfaceBuild;
@@ -162,7 +162,7 @@ void main() {
     // UNIQUE CODE: create DrawText
     let mut draw_text = DrawText::new(device.clone(), queue.clone(), swapchain.clone(), &images);
 
-    let (width, height) = window.window().get_inner_size_points().unwrap();
+    let (width, _) = window.window().get_inner_size_points().unwrap();
     let mut x = -200.0;
     // UNIQUE CODE END
 
@@ -187,18 +187,12 @@ void main() {
 
         let (image_num, acquire_future) = swapchain::acquire_next_image(swapchain.clone(), None).unwrap();
         let command_buffer = AutoCommandBufferBuilder::new(device.clone(), queue.family()).unwrap()
-            // UNIQUE CODE: update DrawTextData internal cache
-            .update_text_cache(&mut draw_text)
-            // UNIQUE CODE END
-
             .begin_render_pass(framebuffers[image_num].clone(), false, vec![[0.0, 0.0, 0.0, 1.0].into()]).unwrap() // CHANGED TO BLACK BACKGROUND
             .draw(pipeline.clone(), DynamicState::none(), vertex_buffer.clone(), (), ()).unwrap()
-
-            // UNIQUE CODE: draw the text
-            .draw_text(&mut draw_text, width, height)
-            // UNIQUE CODE END
-
             .end_render_pass().unwrap()
+            // UNIQUE CODE: draw the text
+            .draw_text(&mut draw_text, image_num)
+            // UNIQUE CODE END
             .build().unwrap();
 
         let future = previous_frame_end.join(acquire_future)

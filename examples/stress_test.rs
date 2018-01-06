@@ -111,9 +111,9 @@ fn main() {
 
     let physical = vulkano::instance::PhysicalDevice::enumerate(&instance).next().expect("no device available");
     let mut events_loop = winit::EventsLoop::new();
-    let window = winit::WindowBuilder::new().build_vk_surface(&events_loop, instance.clone()).unwrap();
+    let surface = winit::WindowBuilder::new().build_vk_surface(&events_loop, instance.clone()).unwrap();
     let queue = physical.queue_families().find(|&q| {
-        q.supports_graphics() && window.surface().is_supported(q).unwrap_or(false)
+        q.supports_graphics() && surface.is_supported(q).unwrap_or(false)
     }).expect("couldn't find a graphical queue family");
 
     let (device, mut queues) = {
@@ -129,13 +129,13 @@ fn main() {
     let queue = queues.next().unwrap();
 
     let (swapchain, images) = {
-        let caps = window.surface().capabilities(physical)
+        let caps = surface.capabilities(physical)
                          .expect("failed to get surface capabilities");
 
         let dimensions = caps.current_extent.unwrap_or([1280, 1024]);
         let alpha = caps.supported_composite_alpha.iter().next().unwrap();
         let format = caps.supported_formats[0].0;
-        Swapchain::new(device.clone(), window.surface().clone(), caps.min_image_count, format,
+        Swapchain::new(device.clone(), surface.clone(), caps.min_image_count, format,
                        dimensions, 1, caps.supported_usage_flags, &queue,
                        SurfaceTransform::Identity, alpha, PresentMode::Fifo, true,
                        None).expect("failed to create swapchain")
@@ -173,7 +173,7 @@ fn main() {
 
     let mut draw_text = DrawText::new(device.clone(), queue.clone(), swapchain.clone(), &images);
 
-    let (width, _) = window.window().get_inner_size_points().unwrap();
+    let (width, _) = surface.window().get_inner_size().unwrap();
     let mut x = 0.0;
 
     let mut previous_frame_end = Box::new(now(device.clone())) as Box<GpuFuture>;

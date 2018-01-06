@@ -9,9 +9,11 @@ keywords = ["vulkano", "text", "font"]
 
 [dependencies]
 rusttype = "0.2"
-vulkano = "0.7"
-vulkano-shader-derive = "0.7"
+# check the readme.md for more details on whats going on here
+vulkano = { git = "https://github.com/vulkano-rs/vulkano" }
+vulkano-shader-derive = { git = "https://github.com/vulkano-rs/vulkano" }
 
 [dev-dependencies]
-winit = "0.7"
-vulkano-win = "0.7"
+# TODO: Use the upstream git vulkano + crates.io winit (when its updated to the next winit), we dont actually need the latest winit here, these are just examples.
+winit = { git = "https://github.com/tomaka/winit" }
+vulkano-win = { git = "https://github.com/rukai/vulkano", branch = "git_winit" }

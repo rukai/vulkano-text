@@ -173,7 +173,7 @@ fn main() {
 
     let mut draw_text = DrawText::new(device.clone(), queue.clone(), swapchain.clone(), &images);
 
-    let (width, _) = window.window().get_inner_size_points().unwrap();
+    let (width, _) = window.window().get_inner_size().unwrap();
     let mut x = 0.0;
 
     let mut previous_frame_end = Box::new(now(device.clone())) as Box<GpuFuture>;

@@ -13,5 +13,10 @@ vulkano = "0.7"
 vulkano-shader-derive = "0.7"
 
 [dev-dependencies]
-winit = "0.7"
-vulkano-win = "0.7"
+winit = "0.10"
+vulkano-win = "0.8"
+
+[patch.crates-io]
+vulkano = { git = "https://github.com/rukai/vulkano", branch = "pf_sandbox2"}
+vulkano-win = { git = "https://github.com/rukai/vulkano", branch = "pf_sandbox2" }
+vulkano-shader-derive = { git = "https://github.com/rukai/vulkano", branch = "pf_sandbox2" }

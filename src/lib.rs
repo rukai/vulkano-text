@@ -10,7 +10,7 @@ use vulkano::command_buffer::{DynamicState, AutoCommandBufferBuilder};
 use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet};
 use vulkano::descriptor::pipeline_layout::PipelineLayoutAbstract;
 use vulkano::device::{Device, Queue};
-use vulkano::format::R8Unorm;
+use vulkano::format::{R8Unorm, ClearValue};
 use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, Subpass, RenderPassAbstract};
 use vulkano::image::{SwapchainImage, ImmutableImage, ImageUsage, ImageLayout, Dimensions};
 use vulkano::pipeline::vertex::SingleBufferDefinition;
@@ -209,7 +209,7 @@ impl<'a> DrawText<'a> {
                 buffer.clone(),
                 cache_texture_write,
             ).unwrap()
-            .begin_render_pass(self.framebuffers[image_num].clone(), false, vec!()).unwrap();
+            .begin_render_pass(self.framebuffers[image_num].clone(), false, vec!(ClearValue::None)).unwrap();
 
         // draw
         for text in &mut self.texts.drain(..) {

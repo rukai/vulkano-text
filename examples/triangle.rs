@@ -162,7 +162,7 @@ void main() {
     // UNIQUE CODE: create DrawText
     let mut draw_text = DrawText::new(device.clone(), queue.clone(), swapchain.clone(), &images);
 
-    let (width, _) = window.window().get_inner_size_points().unwrap();
+    let (width, _) = window.window().get_inner_size().unwrap();
     let mut x = -200.0;
     // UNIQUE CODE END
 

@@ -37,3 +37,21 @@ You will also need to recreate DrawText when you recreate your swapchain e.g. du
 
 ## Example Render
 ![Result:](screenshot.png)
+
+## Development
+
+The crates.io releases of vulkano get old quickly and dont occur often.
+Because of this:
+*   In master branch, the vulkano dependencies will point at a fork of vulkano that uses the latest winit.
+*   When a vulkano breaking-change release occurs I will create a branch that uses crates.io vulkano instead of the fork
+
+
+If you want to use the latest git version of vulkano then use:
+```
+vulkano = { git = "https://github.com/rukai/vulkano", branch = "pf_sandbox3" }
+vulkano-shader-derive = { git = "https://github.com/rukai/vulkano", branch = "pf_sandbox3" }
+vulkano-win = { git = "https://github.com/rukai/vulkano", branch = "pf_sandbox3" }
+winit = { git = "https://github.com/tomaka/winit" }
+```
+
+Otherwise proceed normally.

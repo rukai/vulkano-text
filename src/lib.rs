@@ -10,7 +10,7 @@ use vulkano::command_buffer::{DynamicState, AutoCommandBufferBuilder};
 use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet};
 use vulkano::descriptor::pipeline_layout::PipelineLayoutAbstract;
 use vulkano::device::{Device, Queue};
-use vulkano::format::R8Unorm;
+use vulkano::format::{ClearValue, R8Unorm};
 use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, Subpass, RenderPassAbstract};
 use vulkano::image::{SwapchainImage, ImmutableImage, ImageUsage, ImageLayout, Dimensions};
 use vulkano::pipeline::vertex::SingleBufferDefinition;
@@ -66,7 +66,9 @@ const CACHE_WIDTH: usize = 1000;
 const CACHE_HEIGHT: usize = 1000;
 
 impl<'a> DrawText<'a> {
-    pub fn new(device: Arc<Device>, queue: Arc<Queue>, swapchain: Arc<Swapchain>, images: &[Arc<SwapchainImage>]) -> DrawText<'a> {
+    pub fn new<W>(device: Arc<Device>, queue: Arc<Queue>, swapchain: Arc<Swapchain<W>>, images: &[Arc<SwapchainImage<W>>]) -> DrawText<'a>
+        where W: Send + Sync + 'static
+    {
         let font_data = include_bytes!("DejaVuSans.ttf");
         let collection = FontCollection::from_bytes(font_data as &[u8]);
         let font = collection.into_font().unwrap();
@@ -209,7 +211,8 @@ impl<'a> DrawText<'a> {
                 buffer.clone(),
                 cache_texture_write,
             ).unwrap()
-            .begin_render_pass(self.framebuffers[image_num].clone(), false, vec!()).unwrap();
+            .begin_render_pass(self.framebuffers[image_num].clone(), false,
+                               vec![ClearValue::None]).unwrap();
 
         // draw
         for text in &mut self.texts.drain(..) {

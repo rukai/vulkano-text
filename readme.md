@@ -1,4 +1,4 @@
-# Vulkano Text [![](https://img.shields.io/crates/v/vulkano_text.svg)](https://crates.io/crates/vulkano-text) [![](https://docs.rs/vulkano_text/badge.svg)](https://docs.rs/vulkano_text)
+# Vulkano Text [![](https://img.shields.io/crates/v/vulkano_text.svg)](https://crates.io/crates/vulkano-text) [![](https://docs.rs/vulkano_text/badge.svg)](https://docs.rs/vulkano_text) [![Build Status](https://travis-ci.org/rukai/vulkano-text.svg?branch=master)](https://travis-ci.org/rukai/vulkano-text)
 
 This library is useful if you are building a game prototype with Vulkano and want a quick way to add basic text rendering:
 

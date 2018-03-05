@@ -14,6 +14,5 @@ vulkano = { git = "https://github.com/vulkano-rs/vulkano" }
 vulkano-shader-derive = { git = "https://github.com/vulkano-rs/vulkano" }
 
 [dev-dependencies]
-# TODO: Use the upstream git vulkano + crates.io winit (when its updated to the next winit), we dont actually need the latest winit here, these are just examples.
 winit = { git = "https://github.com/tomaka/winit" }
 vulkano-win = { git = "https://github.com/rukai/vulkano", branch = "git_winit" }

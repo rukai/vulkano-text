@@ -2,7 +2,7 @@
 #[macro_use] extern crate vulkano_shader_derive;
 extern crate rusttype;
 
-use rusttype::{Font, FontCollection, PositionedGlyph, Scale, Rect, point};
+use rusttype::{Font, PositionedGlyph, Scale, Rect, point};
 use rusttype::gpu_cache::Cache;
 
 use vulkano::buffer::{CpuAccessibleBuffer, BufferUsage};
@@ -46,30 +46,29 @@ mod fs {
     struct Dummy;
 }
 
-struct TextData<'a> {
-    glyphs: Vec<PositionedGlyph<'a>>,
+struct TextData {
+    glyphs: Vec<PositionedGlyph<'static>>,
     color:  [f32; 4],
 }
 
-pub struct DrawText<'a> {
+pub struct DrawText {
     device:             Arc<Device>,
     queue:              Arc<Queue>,
-    font:               Font<'a>,
-    cache:              Cache,
+    font:               Font<'static>,
+    cache:              Cache<'static>,
     cache_pixel_buffer: Vec<u8>,
     pipeline:           Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, Box<PipelineLayoutAbstract + Send + Sync>, Arc<RenderPassAbstract + Send + Sync>>>,
     framebuffers:       Vec<Arc<FramebufferAbstract + Send + Sync>>,
-    texts:              Vec<TextData<'a>>,
+    texts:              Vec<TextData>,
 }
 
 const CACHE_WIDTH: usize = 1000;
 const CACHE_HEIGHT: usize = 1000;
 
-impl<'a> DrawText<'a> {
-    pub fn new<W>(device: Arc<Device>, queue: Arc<Queue>, swapchain: Arc<Swapchain<W>>, images: &[Arc<SwapchainImage<W>>]) -> DrawText<'a> where W: Send + Sync + 'static {
+impl DrawText {
+    pub fn new<W>(device: Arc<Device>, queue: Arc<Queue>, swapchain: Arc<Swapchain<W>>, images: &[Arc<SwapchainImage<W>>]) -> DrawText where W: Send + Sync + 'static {
         let font_data = include_bytes!("DejaVuSans.ttf");
-        let collection = FontCollection::from_bytes(font_data as &[u8]);
-        let font = collection.into_font().unwrap();
+        let font = Font::from_bytes(font_data as &[u8]).unwrap();
 
         let vs = vs::Shader::load(device.clone()).unwrap();
         let fs = fs::Shader::load(device.clone()).unwrap();

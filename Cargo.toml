@@ -1,6 +1,6 @@
 [package]
 name = "vulkano_text"
-version = "0.6.1"
+version = "0.6.1" # TODO: next release increment minor version, because the lifetimes on DrawText were removed
 authors = ["Rukai <rubickent@gmail.com>"]
 description = "Render text with the DejaVu font using the Vulkano library."
 license = "MIT"
@@ -8,7 +8,7 @@ repository = "https://github.com/rukai/vulkano-text"
 keywords = ["vulkano", "text", "font"]
 
 [dependencies]
-rusttype = "0.2"
+rusttype = { version = "0.5", features = ["gpu_cache"] }
 # check the readme.md for more details on whats going on here
 vulkano = { git = "https://github.com/vulkano-rs/vulkano" }
 vulkano-shader-derive = { git = "https://github.com/vulkano-rs/vulkano" }

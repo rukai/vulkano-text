@@ -173,7 +173,7 @@ fn main() {
 
     let mut draw_text = DrawText::new(device.clone(), queue.clone(), swapchain.clone(), &images);
 
-    let (width, _) = surface.window().get_inner_size().unwrap();
+    let (width, _): (u32, u32) = surface.window().get_inner_size().unwrap().into();
     let mut x = 0.0;
 
     let mut previous_frame_end = Box::new(now(device.clone())) as Box<GpuFuture>;
@@ -211,7 +211,7 @@ fn main() {
         let mut done = false;
         events_loop.poll_events(|ev| {
             match ev {
-                winit::Event::WindowEvent { event: winit::WindowEvent::Closed, .. } => done = true,
+                winit::Event::WindowEvent { event: winit::WindowEvent::CloseRequested, .. } => done = true,
                 _ => ()
             }
         });

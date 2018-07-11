@@ -8,7 +8,7 @@ repository = "https://github.com/rukai/vulkano-text"
 keywords = ["vulkano", "text", "font"]
 
 [dependencies]
-rusttype = { version = "0.5", features = ["gpu_cache"] }
+rusttype = { version = "0.6", features = ["gpu_cache"] }
 # check the readme.md for more details on whats going on here
 vulkano = { git = "https://github.com/vulkano-rs/vulkano" }
 vulkano-shader-derive = { git = "https://github.com/vulkano-rs/vulkano" }

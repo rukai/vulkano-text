@@ -10,8 +10,8 @@ keywords = ["vulkano", "text", "font"]
 [dependencies]
 rusttype = { version = "0.6", features = ["gpu_cache"] }
 # check the readme.md for more details on whats going on here
-vulkano = { git = "https://github.com/vulkano-rs/vulkano" }
-vulkano-shader-derive = { git = "https://github.com/vulkano-rs/vulkano" }
+vulkano = { git = "https://github.com/rukai/vulkano", branch = "fix_cpu_pool_conflict_key" }
+vulkano-shader-derive = { git = "https://github.com/rukai/vulkano", branch = "fix_cpu_pool_conflict_key" }
 
 [dev-dependencies]
 winit = { git = "https://github.com/tomaka/winit" }

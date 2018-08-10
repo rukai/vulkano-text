@@ -188,7 +188,7 @@ void main() {
         let (image_num, acquire_future) = swapchain::acquire_next_image(swapchain.clone(), None).unwrap();
         let command_buffer = AutoCommandBufferBuilder::new(device.clone(), queue.family()).unwrap()
             .begin_render_pass(framebuffers[image_num].clone(), false, vec![[0.0, 0.0, 0.0, 1.0].into()]).unwrap() // CHANGED TO BLACK BACKGROUND
-            .draw(pipeline.clone(), DynamicState::none(), vertex_buffer.clone(), (), ()).unwrap()
+            .draw(pipeline.clone(), &DynamicState::none(), vertex_buffer.clone(), (), ()).unwrap()
             .end_render_pass().unwrap()
             // UNIQUE CODE: draw the text
             .draw_text(&mut draw_text, image_num)

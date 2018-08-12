@@ -37,10 +37,3 @@ You will also need to recreate DrawText when you recreate your swapchain e.g. du
 
 ## Example Render
 ![Result:](screenshot.png)
-
-## Development
-
-The crates.io releases of vulkano get old quickly and dont occur often. Especially problematic is breaking winit changes need to wait for a breaking vulkano release.
-Because of this:
-*   In the master branch, the vulkano dependencies will point at git vulkano
-*   When a crates.io vulkano release occurs I will create and publish a branch that uses the new release instead of git.

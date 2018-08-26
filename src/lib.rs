@@ -3,7 +3,7 @@
 extern crate rusttype;
 
 use rusttype::{Font, PositionedGlyph, Scale, Rect, point};
-use rusttype::gpu_cache::{Cache, CacheBuilder};
+use rusttype::gpu_cache::Cache;
 
 use vulkano::buffer::{CpuAccessibleBuffer, BufferUsage};
 use vulkano::command_buffer::{DynamicState, AutoCommandBufferBuilder};
@@ -73,13 +73,7 @@ impl DrawText {
         let vs = vs::Shader::load(device.clone()).unwrap();
         let fs = fs::Shader::load(device.clone()).unwrap();
 
-        let cache = CacheBuilder {
-            width:              CACHE_WIDTH as u32,
-            height:             CACHE_HEIGHT as u32,
-            scale_tolerance:    0.1,
-            position_tolerance: 0.1,
-            pad_glyphs:         true,
-        }.build();
+        let cache = Cache::builder().dimensions(CACHE_WIDTH as u32, CACHE_HEIGHT as u32).build();
         let cache_pixel_buffer = vec!(0; CACHE_WIDTH * CACHE_HEIGHT);
 
         let render_pass = Arc::new(single_pass_renderpass!(device.clone(),

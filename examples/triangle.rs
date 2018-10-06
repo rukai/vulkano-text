@@ -3,8 +3,7 @@
 
 #[macro_use]
 extern crate vulkano;
-#[macro_use]
-extern crate vulkano_shader_derive;
+extern crate vulkano_shaders;
 extern crate winit;
 extern crate vulkano_win;
 
@@ -33,6 +32,34 @@ use vulkano::sync::GpuFuture;
 
 use std::iter;
 use std::sync::Arc;
+
+mod vs {
+    vulkano_shaders::shader!{
+        ty: "vertex",
+        src: "
+#version 450
+
+layout(location = 0) in vec2 position;
+
+void main() {
+    gl_Position = vec4(position, 0.0, 1.0);
+}"
+    }
+}
+
+mod fs {
+    vulkano_shaders::shader!{
+        ty: "fragment",
+        src: "
+#version 450
+
+layout(location = 0) out vec4 f_color;
+
+void main() {
+    f_color = vec4(1.0, 0.0, 0.0, 1.0);
+}"
+    }
+}
 
 fn main() {
     let instance = {
@@ -88,38 +115,6 @@ fn main() {
             // BIGGER TRIANGLE END
         ].iter().cloned()).expect("failed to create buffer")
     };
-
-    mod vs {
-        #[derive(VulkanoShader)]
-        #[ty = "vertex"]
-        #[src = "
-#version 450
-
-layout(location = 0) in vec2 position;
-
-void main() {
-    gl_Position = vec4(position, 0.0, 1.0);
-}
-"]
-        #[allow(dead_code)]
-        struct Dummy;
-    }
-
-    mod fs {
-        #[derive(VulkanoShader)]
-        #[ty = "fragment"]
-        #[src = "
-#version 450
-
-layout(location = 0) out vec4 f_color;
-
-void main() {
-    f_color = vec4(1.0, 0.0, 0.0, 1.0);
-}
-"]
-        #[allow(dead_code)]
-        struct Dummy;
-    }
 
     let vs = vs::Shader::load(device.clone()).expect("failed to create shader module");
     let fs = fs::Shader::load(device.clone()).expect("failed to create shader module");

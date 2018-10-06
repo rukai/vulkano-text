@@ -1,5 +1,5 @@
 #[macro_use] extern crate vulkano;
-#[macro_use] extern crate vulkano_shader_derive;
+extern crate vulkano_shaders;
 extern crate rusttype;
 
 use rusttype::{Font, PositionedGlyph, Scale, Rect, point};
@@ -31,19 +31,17 @@ struct Vertex {
 impl_vertex!(Vertex, position, tex_position, color);
 
 mod vs {
-    #[derive(VulkanoShader)]
-    #[ty = "vertex"]
-    #[path = "src/shaders/vertex.glsl"]
-    #[allow(dead_code)]
-    struct Dummy;
+    vulkano_shaders::shader!{
+        ty: "vertex",
+        path: "src/shaders/vertex.glsl",
+    }
 }
 
 mod fs {
-    #[derive(VulkanoShader)]
-    #[ty = "fragment"]
-    #[path = "src/shaders/fragment.glsl"]
-    #[allow(dead_code)]
-    struct Dummy;
+    vulkano_shaders::shader!{
+        ty: "fragment",
+        path: "src/shaders/fragment.glsl",
+    }
 }
 
 struct TextData {

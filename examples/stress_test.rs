@@ -1,8 +1,3 @@
-#[macro_use]
-extern crate vulkano;
-extern crate winit;
-extern crate vulkano_win;
-extern crate vulkano_text;
 use vulkano_text::{DrawText, DrawTextTrait};
 
 use vulkano::command_buffer::AutoCommandBufferBuilder;
@@ -141,7 +136,7 @@ fn main() {
     };
 
     // include a depth buffer (unlike triangle.rs) to ensure vulkano-text isnt dependent on a specific render_pass
-    let render_pass = Arc::new(single_pass_renderpass!(
+    let render_pass = Arc::new(vulkano::single_pass_renderpass!(
         device.clone(),
         attachments: {
             color: {

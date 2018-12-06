@@ -1,14 +1,7 @@
 // Any difference in code from vulkano triangle.rs example is noted with ALL CAPS COMMENT BLOCKS
 // The formatting is different though.
 
-#[macro_use]
-extern crate vulkano;
-extern crate vulkano_shaders;
-extern crate winit;
-extern crate vulkano_win;
-
 // IMPORT
-extern crate vulkano_text;
 use vulkano_text::{DrawText, DrawTextTrait};
 // IMPORT END
 
@@ -99,7 +92,7 @@ fn main() {
     let vertex_buffer = {
         #[derive(Debug, Clone)]
         struct Vertex { position: [f32; 2] }
-        impl_vertex!(Vertex, position);
+        vulkano::impl_vertex!(Vertex, position);
 
         CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), [
             // BIGGER TRIANGLE
@@ -113,7 +106,7 @@ fn main() {
     let vs = vs::Shader::load(device.clone()).unwrap();
     let fs = fs::Shader::load(device.clone()).unwrap();
 
-    let render_pass = Arc::new(single_pass_renderpass!(
+    let render_pass = Arc::new(vulkano::single_pass_renderpass!(
         device.clone(),
         attachments: {
             color: {

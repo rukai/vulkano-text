@@ -1,7 +1,3 @@
-#[macro_use] extern crate vulkano;
-extern crate vulkano_shaders;
-extern crate rusttype;
-
 use rusttype::{Font, PositionedGlyph, Scale, Rect, point};
 use rusttype::gpu_cache::Cache;
 
@@ -28,7 +24,7 @@ struct Vertex {
     tex_position: [f32; 2],
     color:        [f32; 4]
 }
-impl_vertex!(Vertex, position, tex_position, color);
+vulkano::impl_vertex!(Vertex, position, tex_position, color);
 
 mod vs {
     vulkano_shaders::shader!{
@@ -74,7 +70,7 @@ impl DrawText {
         let cache = Cache::builder().dimensions(CACHE_WIDTH as u32, CACHE_HEIGHT as u32).build();
         let cache_pixel_buffer = vec!(0; CACHE_WIDTH * CACHE_HEIGHT);
 
-        let render_pass = Arc::new(single_pass_renderpass!(device.clone(),
+        let render_pass = Arc::new(vulkano::single_pass_renderpass!(device.clone(),
             attachments: {
                 color: {
                     load: Load,

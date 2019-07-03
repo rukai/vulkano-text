@@ -18,7 +18,7 @@ use vulkano::swapchain::Swapchain;
 use std::iter;
 use std::sync::Arc;
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 struct Vertex {
     position:     [f32; 2],
     tex_position: [f32; 2],
@@ -51,8 +51,8 @@ pub struct DrawText {
     font:               Font<'static>,
     cache:              Cache<'static>,
     cache_pixel_buffer: Vec<u8>,
-    pipeline:           Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, Box<PipelineLayoutAbstract + Send + Sync>, Arc<RenderPassAbstract + Send + Sync>>>,
-    framebuffers:       Vec<Arc<FramebufferAbstract + Send + Sync>>,
+    pipeline:           Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, Box<dyn PipelineLayoutAbstract + Send + Sync>, Arc<dyn RenderPassAbstract + Send + Sync>>>,
+    framebuffers:       Vec<Arc<dyn FramebufferAbstract + Send + Sync>>,
     texts:              Vec<TextData>,
 }
 
@@ -83,14 +83,14 @@ impl DrawText {
                 color: [color],
                 depth_stencil: {}
             }
-        ).unwrap()) as Arc<RenderPassAbstract + Send + Sync>;
+        ).unwrap()) as Arc<dyn RenderPassAbstract + Send + Sync>;
 
         let framebuffers = images.iter().map(|image| {
             Arc::new(
                 Framebuffer::start(render_pass.clone())
                 .add(image.clone()).unwrap()
                 .build().unwrap()
-            ) as Arc<FramebufferAbstract + Send + Sync>
+            ) as Arc<dyn FramebufferAbstract + Send + Sync>
         }).collect::<Vec<_>>();
 
         let pipeline = Arc::new(GraphicsPipeline::start()

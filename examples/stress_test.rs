@@ -172,7 +172,7 @@ fn main() {
     let mut x = 0.0;
 
     let mut recreate_swapchain = false;
-    let mut previous_frame_end = Box::new(sync::now(device.clone())) as Box<GpuFuture>;
+    let mut previous_frame_end = Box::new(sync::now(device.clone())) as Box<dyn GpuFuture>;
 
     let start = Instant::now();
     let mut frames_rendered = 0;

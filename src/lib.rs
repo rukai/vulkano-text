@@ -45,10 +45,10 @@ struct TextData {
     color:  [f32; 4],
 }
 
-pub struct DrawText {
+pub struct DrawText<'a> {
     device:             Arc<Device>,
     queue:              Arc<Queue>,
-    font:               Font<'static>,
+    font:               Font<'a>,
     cache:              Cache<'static>,
     cache_pixel_buffer: Vec<u8>,
     pipeline:           Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, Box<dyn PipelineLayoutAbstract + Send + Sync>, Arc<dyn RenderPassAbstract + Send + Sync>>>,
@@ -59,10 +59,26 @@ pub struct DrawText {
 const CACHE_WIDTH: usize = 1000;
 const CACHE_HEIGHT: usize = 1000;
 
-impl DrawText {
-    pub fn new<W>(device: Arc<Device>, queue: Arc<Queue>, swapchain: Arc<Swapchain<W>>, images: &[Arc<SwapchainImage<W>>]) -> DrawText where W: Send + Sync + 'static {
-        let font_data = include_bytes!("DejaVuSans.ttf");
-        let font = Font::from_bytes(font_data as &[u8]).unwrap();
+impl<'a> DrawText<'a> {
+	//uses DejaVuSans
+	pub fn new<W>(device: Arc<Device>, queue: Arc<Queue>, swapchain: Arc<Swapchain<W>>, images: &[Arc<SwapchainImage<W>>]) -> DrawText<'a> where W: Send + Sync + 'static {
+		Self::inner_new(device, queue, swapchain, images, None)
+	}
+
+	pub fn with_font<W>(device: Arc<Device>, queue: Arc<Queue>, swapchain: Arc<Swapchain<W>>, images: &[Arc<SwapchainImage<W>>], font: Font<'a>) -> DrawText<'a> where W: Send + Sync + 'static {
+		Self::inner_new(device, queue, swapchain, images, Some(font))
+	}
+
+    fn inner_new<W>(device: Arc<Device>, queue: Arc<Queue>, swapchain: Arc<Swapchain<W>>, images: &[Arc<SwapchainImage<W>>], font: Option<Font<'a>>) -> DrawText<'a> where W: Send + Sync + 'static {
+		let font = {
+			if let Some(f) = font{
+				f
+			}
+			else{
+        		let font_data = include_bytes!("DejaVuSans.ttf");
+        		Font::from_bytes(font_data as &[u8]).unwrap()
+			}
+		};
 
         let vs = vs::Shader::load(device.clone()).unwrap();
         let fs = fs::Shader::load(device.clone()).unwrap();

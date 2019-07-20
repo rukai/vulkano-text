@@ -1,9 +1,9 @@
 [package]
 name = "vulkano_text"
-version = "0.11.0"
+version = "0.12.0"
 edition = "2018"
 authors = ["Rukai <rubickent@gmail.com>"]
-description = "Render text with the DejaVu font using the Vulkano library."
+description = "Render text with TTF fonts using the Vulkano library."
 license = "MIT"
 repository = "https://github.com/rukai/vulkano-text"
 keywords = ["vulkano", "text", "font"]

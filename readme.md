@@ -2,7 +2,6 @@
 
 This library is useful if you are building a game prototype with Vulkano and want a quick way to add basic text rendering:
 
-*   You can only use the DejaVu font
 *   The text is rendered on top of the contents of your swapchain image (no depthbuffer or draw ordering)
 
 ## Usage
@@ -34,6 +33,8 @@ Call draw_text on the AutoCommandBufferBuilder after your game render pass:
 ```
 
 You will also need to recreate DrawText when you recreate your swapchain e.g. due to window resize
+
+Note: The default font, if no font is given, is DejaVu
 
 ## Example Render
 ![Result:](screenshot.png)

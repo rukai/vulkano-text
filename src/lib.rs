@@ -163,6 +163,7 @@ impl DrawText {
         let buffer = CpuAccessibleBuffer::<[u8]>::from_iter(
             self.device.clone(),
             BufferUsage::all(),
+            false,
             cache_pixel_buffer.iter().cloned()
         ).unwrap();
 
@@ -192,7 +193,7 @@ impl DrawText {
         ).unwrap();
 
         let set = Arc::new(
-            PersistentDescriptorSet::start(self.pipeline.clone(), 0)
+            PersistentDescriptorSet::start(self.pipeline.descriptor_set_layout(0).unwrap().clone())
             .add_sampled_image(cache_texture.clone(), sampler).unwrap()
             .build().unwrap()
         );
@@ -257,7 +258,7 @@ impl DrawText {
                 }
             }).collect();
 
-            let vertex_buffer = CpuAccessibleBuffer::from_iter(self.device.clone(), BufferUsage::all(), vertices.into_iter()).unwrap();
+            let vertex_buffer = CpuAccessibleBuffer::from_iter(self.device.clone(), BufferUsage::all(), false, vertices.into_iter()).unwrap();
             command_buffer = command_buffer.draw(self.pipeline.clone(), &DynamicState::none(), vertex_buffer.clone(), set.clone(), ()).unwrap();
         }
 

@@ -13,14 +13,16 @@ use vulkano::image::SwapchainImage;
 use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::pipeline::GraphicsPipeline;
 use vulkano::pipeline::viewport::Viewport;
-use vulkano::swapchain::{AcquireError, PresentMode, SurfaceTransform, Swapchain, SwapchainCreationError};
+use vulkano::swapchain::{AcquireError, PresentMode, SurfaceTransform, Swapchain, SwapchainCreationError, ColorSpace, FullscreenExclusive};
 use vulkano::swapchain;
 use vulkano::sync::{GpuFuture, FlushError};
 use vulkano::sync;
 
 use vulkano_win::VkSurfaceBuild;
 
-use winit::{EventsLoop, Window, WindowBuilder, Event, WindowEvent};
+use winit::window::{WindowBuilder, Window};
+use winit::event_loop::{EventLoop, ControlFlow};
+use winit::event::{Event, WindowEvent};
 
 use std::sync::Arc;
 
@@ -53,40 +55,30 @@ void main() {
 }
 
 fn main() {
-    let extensions = vulkano_win::required_extensions();
-    let instance = Instance::new(None, &extensions, None).unwrap();
-
+    let required_extensions = vulkano_win::required_extensions();
+    let instance = Instance::new(None, &required_extensions, None).unwrap();
     let physical = PhysicalDevice::enumerate(&instance).next().unwrap();
     println!("Using device: {} (type: {:?})", physical.name(), physical.ty());
 
-    let mut events_loop = EventsLoop::new();
-    let surface = WindowBuilder::new().build_vk_surface(&events_loop, instance.clone()).unwrap();
-    let window = surface.window();
-
+    let event_loop = EventLoop::new();
+    let surface = WindowBuilder::new().build_vk_surface(&event_loop, instance.clone()).unwrap();
     let queue_family = physical.queue_families().find(|&q| {
         q.supports_graphics() && surface.is_supported(q).unwrap_or(false)
     }).unwrap();
-
     let device_ext = DeviceExtensions { khr_swapchain: true, .. DeviceExtensions::none() };
     let (device, mut queues) = Device::new(physical, physical.supported_features(), &device_ext,
         [(queue_family, 0.5)].iter().cloned()).unwrap();
     let queue = queues.next().unwrap();
-
-    let initial_dimensions = if let Some(dimensions) = window.get_inner_size() {
-        let dimensions: (u32, u32) = dimensions.to_physical(window.get_hidpi_factor()).into();
-        [dimensions.0, dimensions.1]
-    } else {
-        return;
-    };
-
     let (mut swapchain, images) = {
         let caps = surface.capabilities(physical).unwrap();
         let usage = caps.supported_usage_flags;
         let alpha = caps.supported_composite_alpha.iter().next().unwrap();
         let format = caps.supported_formats[0].0;
+        let dimensions: [u32; 2] = surface.window().inner_size().into();
+        Swapchain::new(device.clone(), surface.clone(), caps.min_image_count, format,
+            dimensions, 1, usage, &queue, SurfaceTransform::Identity, alpha,
+            PresentMode::Fifo, FullscreenExclusive::Default, true, ColorSpace::SrgbNonLinear).unwrap()
 
-        Swapchain::new(device.clone(), surface.clone(), caps.min_image_count, format, initial_dimensions,
-            1, usage, &queue, SurfaceTransform::Identity, alpha, PresentMode::Fifo, true, None).unwrap()
     };
 
     let vertex_buffer = {
@@ -94,7 +86,7 @@ fn main() {
         struct Vertex { position: [f32; 2] }
         vulkano::impl_vertex!(Vertex, position);
 
-        CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), [
+        CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, [
             // BIGGER TRIANGLE
             Vertex { position: [-1.0, 0.5] },
             Vertex { position: [0.0, -1.0] },
@@ -135,103 +127,103 @@ fn main() {
     // CREATE DRAWTEXT
     let mut draw_text = DrawText::new(device.clone(), queue.clone(), swapchain.clone(), &images);
 
-    let (width, _): (u32, u32) = surface.window().get_inner_size().unwrap().into();
+    let (width, _): (u32, u32) = surface.window().inner_size().into();
     let mut x = -200.0;
     // CREATE DRAWTEXT END
 
-    let mut recreate_swapchain = false;
-    let mut previous_frame_end = Box::new(sync::now(device.clone())) as Box<dyn GpuFuture>;
-    let mut dynamic_state = DynamicState { line_width: None, viewports: None, scissors: None };
+    let mut dynamic_state = DynamicState { line_width: None, viewports: None, scissors: None, compare_mask: None, write_mask: None, reference: None };
     let mut framebuffers = window_size_dependent_setup(&images, render_pass.clone(), &mut dynamic_state);
+    let mut recreate_swapchain = false;
+    let mut previous_frame_end = Some(Box::new(sync::now(device.clone())) as Box<dyn GpuFuture>);
 
-    loop {
-        previous_frame_end.cleanup_finished();
-        if recreate_swapchain {
-            let dimensions = if let Some(dimensions) = window.get_inner_size() {
-                let dimensions: (u32, u32) = dimensions.to_physical(window.get_hidpi_factor()).into();
-                [dimensions.0, dimensions.1]
-            } else {
-                return;
-            };
-
-            let (new_swapchain, new_images) = match swapchain.recreate_with_dimension(dimensions) {
-                Ok(r) => r,
-                Err(SwapchainCreationError::UnsupportedDimensions) => continue,
-                Err(err) => panic!("{:?}", err)
-            };
-
-            swapchain = new_swapchain;
-            framebuffers = window_size_dependent_setup(&new_images, render_pass.clone(), &mut dynamic_state);
-            // RECREATE DRAWTEXT ON RESIZE
-            draw_text = DrawText::new(device.clone(), queue.clone(), swapchain.clone(), &new_images);
-            // RECREATE DRAWTEXT ON RESIZE END
-
-            recreate_swapchain = false;
-        }
-
-        // SPECIFY TEXT TO DRAW
-        if x > width as f32 {
-            x = 0.0;
-        }
-        else {
-            x += 0.4;
-        }
-
-        draw_text.queue_text(200.0, 50.0, 20.0, [1.0, 1.0, 1.0, 1.0], "The quick brown fox jumps over the lazy dog.");
-        draw_text.queue_text(20.0, 200.0, 190.0, [0.0, 1.0, 1.0, 1.0], "Hello world!");
-        draw_text.queue_text(x, 350.0, 70.0, [0.51, 0.6, 0.74, 1.0], "Lenny: ( ͡° ͜ʖ ͡°)");
-        draw_text.queue_text(50.0, 350.0, 70.0, [1.0, 1.0, 1.0, 1.0], "Overlap");
-        // SPECIFY TEXT TO DRAW END
-
-        let (image_num, acquire_future) = match swapchain::acquire_next_image(swapchain.clone(), None) {
-            Ok(r) => r,
-            Err(AcquireError::OutOfDate) => {
-                recreate_swapchain = true;
-                continue;
+    event_loop.run(move |event, _, control_flow| {
+        match event {
+            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+                *control_flow = ControlFlow::Exit;
             },
-            Err(err) => panic!("{:?}", err)
-        };
-
-        let clear_values = vec!([0.0, 0.0, 0.0, 1.0].into()); // CHANGED TO BLACK BACKGROUND
-
-        let command_buffer = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap()
-            .begin_render_pass(framebuffers[image_num].clone(), false, clear_values).unwrap()
-            .draw(pipeline.clone(), &dynamic_state, vertex_buffer.clone(), (), ()).unwrap()
-            .end_render_pass().unwrap()
-            // DRAW THE TEXT
-            .draw_text(&mut draw_text, image_num)
-            // DRAW THE TEXT END
-            .build().unwrap();
-
-        let future = previous_frame_end.join(acquire_future)
-            .then_execute(queue.clone(), command_buffer).unwrap()
-            .then_swapchain_present(queue.clone(), swapchain.clone(), image_num)
-            .then_signal_fence_and_flush();
-
-        match future {
-            Ok(future) => {
-                previous_frame_end = Box::new(future) as Box<_>;
-            }
-            Err(FlushError::OutOfDate) => {
+            Event::WindowEvent { event: WindowEvent::Resized(_), .. } => {
                 recreate_swapchain = true;
-                previous_frame_end = Box::new(sync::now(device.clone())) as Box<_>;
-            }
-            Err(e) => {
-                println!("{:?}", e);
-                previous_frame_end = Box::new(sync::now(device.clone())) as Box<_>;
-            }
-        }
+            },
+            Event::RedrawEventsCleared => {
+                previous_frame_end.as_mut().unwrap().cleanup_finished();
+                if recreate_swapchain {
+                    let dimensions: [u32; 2] = surface.window().inner_size().into();
+                    let (new_swapchain, new_images) = match swapchain.recreate_with_dimensions(dimensions) {
+                        Ok(r) => r,
+                        Err(SwapchainCreationError::UnsupportedDimensions) => return,
+                        Err(e) => panic!("Failed to recreate swapchain: {:?}", e)
+                    };
 
-        let mut done = false;
-        events_loop.poll_events(|ev| {
-            match ev {
-                Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => done = true,
-                Event::WindowEvent { event: WindowEvent::Resized(_), .. } => recreate_swapchain = true,
-                _ => ()
-            }
-        });
-        if done { return; }
-    }
+                    swapchain = new_swapchain;
+                    framebuffers = window_size_dependent_setup(&new_images, render_pass.clone(), &mut dynamic_state);
+                    // RECREATE DRAWTEXT ON RESIZE
+                    draw_text = DrawText::new(device.clone(), queue.clone(), swapchain.clone(), &new_images);
+                    // RECREATE DRAWTEXT ON RESIZE END
+
+                    recreate_swapchain = false;
+                }
+
+                // SPECIFY TEXT TO DRAW
+                if x > width as f32 {
+                    x = 0.0;
+                }
+                else {
+                    x += 0.4;
+                }
+
+                draw_text.queue_text(200.0, 50.0, 20.0, [1.0, 1.0, 1.0, 1.0], "The quick brown fox jumps over the lazy dog.");
+                draw_text.queue_text(20.0, 200.0, 190.0, [0.0, 1.0, 1.0, 1.0], "Hello world!");
+                draw_text.queue_text(x, 350.0, 70.0, [0.51, 0.6, 0.74, 1.0], "Lenny: ( ͡° ͜ʖ ͡°)");
+                draw_text.queue_text(50.0, 350.0, 70.0, [1.0, 1.0, 1.0, 1.0], "Overlap");
+                // SPECIFY TEXT TO DRAW END
+
+                let (image_num, suboptimal, acquire_future) = match swapchain::acquire_next_image(swapchain.clone(), None) {
+                    Ok(r) => r,
+                    Err(AcquireError::OutOfDate) => {
+                        recreate_swapchain = true;
+                        return;
+                    },
+                    Err(e) => panic!("Failed to acquire next image: {:?}", e)
+                };
+
+                if suboptimal {
+                    recreate_swapchain = true;
+                }
+
+                let clear_values = vec!([0.0, 0.0, 0.0, 1.0].into()); // CHANGED TO BLACK BACKGROUND
+
+                let command_buffer = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap()
+                    .begin_render_pass(framebuffers[image_num].clone(), false, clear_values).unwrap()
+                    .draw(pipeline.clone(), &dynamic_state, vertex_buffer.clone(), (), ()).unwrap()
+                    .end_render_pass().unwrap()
+                    // DRAW THE TEXT
+                    .draw_text(&mut draw_text, image_num)
+                    // DRAW THE TEXT END
+                    .build().unwrap();
+
+                let future = previous_frame_end.take().unwrap()
+                    .join(acquire_future)
+                    .then_execute(queue.clone(), command_buffer).unwrap()
+                    .then_swapchain_present(queue.clone(), swapchain.clone(), image_num)
+                    .then_signal_fence_and_flush();
+
+                match future {
+                    Ok(future) => {
+                        previous_frame_end = Some(Box::new(future) as Box<_>);
+                    },
+                    Err(FlushError::OutOfDate) => {
+                        recreate_swapchain = true;
+                        previous_frame_end = Some(Box::new(sync::now(device.clone())) as Box<_>);
+                    }
+                    Err(e) => {
+                        println!("Failed to flush future: {:?}", e);
+                        previous_frame_end = Some(Box::new(sync::now(device.clone())) as Box<_>);
+                    }
+                }
+            },
+            _ => ()
+        }
+    });
 }
 
 /// This method is called once during initialization, then again whenever the window is resized

@@ -6,7 +6,7 @@ use vulkano_text::{DrawText, DrawTextTrait};
 // IMPORT END
 
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
-use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState, SubpassContents};
 use vulkano::device::{Device, DeviceExtensions};
 use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, Subpass, RenderPassAbstract};
 use vulkano::image::SwapchainImage;
@@ -192,14 +192,17 @@ fn main() {
 
                 let clear_values = vec!([0.0, 0.0, 0.0, 1.0].into()); // CHANGED TO BLACK BACKGROUND
 
-                let command_buffer = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap()
-                    .begin_render_pass(framebuffers[image_num].clone(), false, clear_values).unwrap()
+                let mut builder = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap();
+
+                builder
+                    .begin_render_pass(framebuffers[image_num].clone(), SubpassContents::Inline, clear_values).unwrap()
                     .draw(pipeline.clone(), &dynamic_state, vertex_buffer.clone(), (), ()).unwrap()
                     .end_render_pass().unwrap()
                     // DRAW THE TEXT
-                    .draw_text(&mut draw_text, image_num)
+                    .draw_text(&mut draw_text, image_num);
                     // DRAW THE TEXT END
-                    .build().unwrap();
+                
+                let command_buffer = builder.build().unwrap();
 
                 let future = previous_frame_end.take().unwrap()
                     .join(acquire_future)

@@ -2,7 +2,7 @@ use rusttype::{Font, PositionedGlyph, Scale, Rect, point};
 use rusttype::gpu_cache::Cache;
 
 use vulkano::buffer::{CpuAccessibleBuffer, BufferUsage};
-use vulkano::command_buffer::{DynamicState, AutoCommandBufferBuilder};
+use vulkano::command_buffer::{DynamicState, AutoCommandBufferBuilder, SubpassContents};
 use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet};
 use vulkano::descriptor::pipeline_layout::PipelineLayoutAbstract;
 use vulkano::device::{Device, Queue};
@@ -135,7 +135,7 @@ impl DrawText {
         });
     }
 
-    pub fn draw_text(&mut self, command_buffer: AutoCommandBufferBuilder, image_num: usize) -> AutoCommandBufferBuilder {
+    pub fn draw_text<'a>(&mut self, command_buffer: &'a mut AutoCommandBufferBuilder, image_num: usize) -> &'a mut AutoCommandBufferBuilder {
         let screen_width  = self.framebuffers[image_num].dimensions()[0];
         let screen_height = self.framebuffers[image_num].dimensions()[1];
         let cache_pixel_buffer = &mut self.cache_pixel_buffer;
@@ -203,7 +203,7 @@ impl DrawText {
                 buffer.clone(),
                 cache_texture_write,
             ).unwrap()
-            .begin_render_pass(self.framebuffers[image_num].clone(), false, vec!(ClearValue::None)).unwrap();
+            .begin_render_pass(self.framebuffers[image_num].clone(), SubpassContents::Inline, vec!(ClearValue::None)).unwrap();
 
         // draw
         for text in &mut self.texts.drain(..) {
@@ -267,11 +267,11 @@ impl DrawText {
 }
 
 impl DrawTextTrait for AutoCommandBufferBuilder {
-    fn draw_text(self, data: &mut DrawText, image_num: usize) -> AutoCommandBufferBuilder {
+    fn draw_text(&mut self, data: &mut DrawText, image_num: usize) -> &mut Self {
         data.draw_text(self, image_num)
     }
 }
 
 pub trait DrawTextTrait {
-    fn draw_text(self, data: &mut DrawText, image_num: usize) -> AutoCommandBufferBuilder;
+    fn draw_text(&mut self, data: &mut DrawText, image_num: usize) -> &mut Self;
 }

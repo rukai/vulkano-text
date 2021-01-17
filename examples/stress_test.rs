@@ -1,6 +1,6 @@
 use vulkano_text::{DrawText, DrawTextTrait};
 
-use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState, SubpassContents};
 use vulkano::device::{Device, DeviceExtensions};
 use vulkano::format::Format;
 use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, RenderPassAbstract};
@@ -241,11 +241,14 @@ fn main() {
                 }
 
                 let clear_values = vec!([0.0, 0.0, 0.0, 1.0].into(), 1f32.into());
-                let command_buffer = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap()
-                    .begin_render_pass(framebuffers[image_num].clone(), false, clear_values).unwrap()
+                let mut builder = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap();
+
+                builder
+                    .begin_render_pass(framebuffers[image_num].clone(), SubpassContents::Inline, clear_values).unwrap()
                     .end_render_pass().unwrap()
-                    .draw_text(&mut draw_text, image_num)
-                    .build().unwrap();
+                    .draw_text(&mut draw_text, image_num);
+
+                let command_buffer = builder.build().unwrap();
 
                 let future = previous_frame_end.take().unwrap()
                     .join(acquire_future)

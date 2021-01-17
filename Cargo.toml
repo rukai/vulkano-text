@@ -1,6 +1,6 @@
 [package]
 name = "vulkano_text"
-version = "0.12.0"
+version = "0.13.0"
 edition = "2018"
 authors = ["Rukai <rubickent@gmail.com>"]
 description = "Render text with the DejaVu font using the Vulkano library."

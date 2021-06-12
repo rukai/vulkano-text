@@ -2,13 +2,14 @@ use rusttype::{Font, PositionedGlyph, Scale, Rect, point};
 use rusttype::gpu_cache::Cache;
 
 use vulkano::buffer::{CpuAccessibleBuffer, BufferUsage};
-use vulkano::command_buffer::{DynamicState, AutoCommandBufferBuilder, SubpassContents};
+use vulkano::command_buffer::{DynamicState, AutoCommandBufferBuilder, SubpassContents, PrimaryAutoCommandBuffer};
 use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet};
 use vulkano::descriptor::pipeline_layout::PipelineLayoutAbstract;
 use vulkano::device::{Device, Queue};
-use vulkano::format::{R8Unorm, ClearValue};
-use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, Subpass, RenderPassAbstract};
-use vulkano::image::{SwapchainImage, ImmutableImage, ImageUsage, ImageLayout, Dimensions};
+use vulkano::format::{Format, ClearValue};
+use vulkano::render_pass::{Framebuffer, FramebufferAbstract, Subpass, RenderPass};
+use vulkano::image::{SwapchainImage, ImmutableImage, ImageCreateFlags, ImageUsage, ImageLayout, ImageDimensions};
+use vulkano::image::view::ImageView;
 use vulkano::pipeline::vertex::SingleBufferDefinition;
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::pipeline::GraphicsPipeline;
@@ -51,7 +52,7 @@ pub struct DrawText {
     font:               Font<'static>,
     cache:              Cache<'static>,
     cache_pixel_buffer: Vec<u8>,
-    pipeline:           Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, Box<dyn PipelineLayoutAbstract + Send + Sync>, Arc<dyn RenderPassAbstract + Send + Sync>>>,
+    pipeline:           Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, Box<dyn PipelineLayoutAbstract + Send + Sync>>>,
     framebuffers:       Vec<Arc<dyn FramebufferAbstract + Send + Sync>>,
     texts:              Vec<TextData>,
 }
@@ -83,12 +84,13 @@ impl DrawText {
                 color: [color],
                 depth_stencil: {}
             }
-        ).unwrap()) as Arc<dyn RenderPassAbstract + Send + Sync>;
+        ).unwrap()) as Arc<RenderPass>;
 
         let framebuffers = images.iter().map(|image| {
+            let view = ImageView::new(image.clone()).unwrap();
             Arc::new(
                 Framebuffer::start(render_pass.clone())
-                .add(image.clone()).unwrap()
+                .add(view).unwrap()
                 .build().unwrap()
             ) as Arc<dyn FramebufferAbstract + Send + Sync>
         }).collect::<Vec<_>>();
@@ -113,7 +115,7 @@ impl DrawText {
         );
 
         DrawText {
-            device: device.clone(),
+            device,
             queue,
             font,
             cache,
@@ -131,11 +133,11 @@ impl DrawText {
         }
         self.texts.push(TextData {
             glyphs: glyphs.clone(),
-            color:  color,
+            color,
         });
     }
 
-    pub fn draw_text<'a>(&mut self, command_buffer: &'a mut AutoCommandBufferBuilder, image_num: usize) -> &'a mut AutoCommandBufferBuilder {
+    pub fn draw_text<'a>(&mut self, command_buffer: &'a mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>, image_num: usize) -> &'a mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer> {
         let screen_width  = self.framebuffers[image_num].dimensions()[0];
         let screen_height = self.framebuffers[image_num].dimensions()[1];
         let cache_pixel_buffer = &mut self.cache_pixel_buffer;
@@ -169,14 +171,15 @@ impl DrawText {
 
         let (cache_texture, cache_texture_write) = ImmutableImage::uninitialized(
             self.device.clone(),
-            Dimensions::Dim2d { width: CACHE_WIDTH as u32, height: CACHE_HEIGHT as u32 },
-            R8Unorm,
+            ImageDimensions::Dim2d { width: CACHE_WIDTH as u32, height: CACHE_HEIGHT as u32, array_layers: 1 },
+            Format::R8Unorm,
             1,
             ImageUsage {
                 sampled: true,
                 transfer_destination: true,
                 .. ImageUsage::none()
             },
+            ImageCreateFlags::none(),
             ImageLayout::General,
             Some(self.queue.family())
         ).unwrap();
@@ -192,15 +195,17 @@ impl DrawText {
             0.0, 1.0, 0.0, 0.0
         ).unwrap();
 
+        let cache_texture_view = ImageView::new(cache_texture).unwrap();
+
         let set = Arc::new(
             PersistentDescriptorSet::start(self.pipeline.descriptor_set_layout(0).unwrap().clone())
-            .add_sampled_image(cache_texture.clone(), sampler).unwrap()
+            .add_sampled_image(cache_texture_view, sampler).unwrap()
             .build().unwrap()
         );
 
         let mut command_buffer = command_buffer
             .copy_buffer_to_image(
-                buffer.clone(),
+                buffer,
                 cache_texture_write,
             ).unwrap()
             .begin_render_pass(self.framebuffers[image_num].clone(), SubpassContents::Inline, vec!(ClearValue::None)).unwrap();
@@ -259,14 +264,14 @@ impl DrawText {
             }).collect();
 
             let vertex_buffer = CpuAccessibleBuffer::from_iter(self.device.clone(), BufferUsage::all(), false, vertices.into_iter()).unwrap();
-            command_buffer = command_buffer.draw(self.pipeline.clone(), &DynamicState::none(), vertex_buffer.clone(), set.clone(), ()).unwrap();
+            command_buffer = command_buffer.draw(self.pipeline.clone(), &DynamicState::none(), vertex_buffer.clone(), set.clone(), (), vec![]).unwrap();
         }
 
         command_buffer.end_render_pass().unwrap()
     }
 }
 
-impl DrawTextTrait for AutoCommandBufferBuilder {
+impl DrawTextTrait for AutoCommandBufferBuilder<PrimaryAutoCommandBuffer> {
     fn draw_text(&mut self, data: &mut DrawText, image_num: usize) -> &mut Self {
         data.draw_text(self, image_num)
     }

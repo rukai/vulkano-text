@@ -1,14 +1,15 @@
 use vulkano_text::{DrawText, DrawTextTrait};
 
-use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState, SubpassContents};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState, SubpassContents, CommandBufferUsage};
 use vulkano::device::{Device, DeviceExtensions};
 use vulkano::format::Format;
-use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, RenderPassAbstract};
+use vulkano::render_pass::{Framebuffer, FramebufferAbstract, RenderPass};
 use vulkano::image::attachment::AttachmentImage;
 use vulkano::image::SwapchainImage;
+use vulkano::image::view::ImageView;
 use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::pipeline::viewport::Viewport;
-use vulkano::swapchain::{AcquireError, PresentMode, SurfaceTransform, Swapchain, SwapchainCreationError, ColorSpace, FullscreenExclusive};
+use vulkano::swapchain::{AcquireError, Swapchain, SwapchainCreationError};
 use vulkano::swapchain;
 use vulkano::sync::{GpuFuture, FlushError};
 use vulkano::sync;
@@ -26,7 +27,7 @@ use std::env;
 fn window_size_dependent_setup(
     device: Arc<Device>,
     images: &[Arc<SwapchainImage<Window>>],
-    render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
+    render_pass: Arc<RenderPass>,
     dynamic_state: &mut DynamicState
 ) -> Vec<Arc<dyn FramebufferAbstract + Send + Sync>> {
     let dimensions = images[0].dimensions();
@@ -40,10 +41,12 @@ fn window_size_dependent_setup(
 
     let depthbuffer = AttachmentImage::transient(device.clone(), images[0].dimensions(), Format::D16Unorm).unwrap();
     images.iter().map(|image| {
+        let image_view = ImageView::new(image.clone()).unwrap();
+        let depth_view = ImageView::new(depthbuffer.clone()).unwrap();
         Arc::new(
             Framebuffer::start(render_pass.clone())
-                .add(image.clone()).unwrap()
-                .add(depthbuffer.clone()).unwrap()
+                .add(image_view).unwrap()
+                .add(depth_view).unwrap()
                 .build().unwrap()
         ) as Arc<dyn FramebufferAbstract + Send + Sync>
     }).collect::<Vec<_>>()
@@ -135,7 +138,8 @@ fn main() {
     println!("Using device: {} (type: {:?})", physical.name(), physical.ty());
 
     let event_loop = EventLoop::new();
-    let surface = WindowBuilder::new().build_vk_surface(&event_loop, instance.clone()).unwrap();
+    let window_builder = WindowBuilder::new();
+    let surface = window_builder.build_vk_surface(&event_loop, instance.clone()).unwrap();
     let queue_family = physical.queue_families().find(|&q| {
         q.supports_graphics() && surface.is_supported(q).unwrap_or(false)
     }).unwrap();
@@ -149,10 +153,15 @@ fn main() {
         let alpha = caps.supported_composite_alpha.iter().next().unwrap();
         let format = caps.supported_formats[0].0;
         let dimensions: [u32; 2] = surface.window().inner_size().into();
-        Swapchain::new(device.clone(), surface.clone(), caps.min_image_count, format,
-            dimensions, 1, usage, &queue, SurfaceTransform::Identity, alpha,
-            PresentMode::Fifo, FullscreenExclusive::Default, true, ColorSpace::SrgbNonLinear).unwrap()
-
+        Swapchain::start(device.clone(), surface.clone())
+            .num_images(caps.min_image_count)
+            .format(format)
+            .dimensions(dimensions)
+            .usage(usage)
+            .sharing_mode(&queue)
+            .composite_alpha(alpha)
+            .build()
+            .unwrap()
     };
 
     // include a depth buffer (unlike triangle.rs) to ensure vulkano-text isnt dependent on a specific render_pass
@@ -202,7 +211,7 @@ fn main() {
                 previous_frame_end.as_mut().unwrap().cleanup_finished();
                 if recreate_swapchain {
                     let dimensions: [u32; 2] = surface.window().inner_size().into();
-                    let (new_swapchain, new_images) = match swapchain.recreate_with_dimensions(dimensions) {
+                    let (new_swapchain, new_images) = match swapchain.recreate().dimensions(dimensions).build() {
                         Ok(r) => r,
                         Err(SwapchainCreationError::UnsupportedDimensions) => return,
                         Err(e) => panic!("Failed to recreate swapchain: {:?}", e)
@@ -241,7 +250,7 @@ fn main() {
                 }
 
                 let clear_values = vec!([0.0, 0.0, 0.0, 1.0].into(), 1f32.into());
-                let mut builder = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap();
+                let mut builder = AutoCommandBufferBuilder::primary(device.clone(), queue.family(), CommandBufferUsage::OneTimeSubmit).unwrap();
 
                 builder
                     .begin_render_pass(framebuffers[image_num].clone(), SubpassContents::Inline, clear_values).unwrap()

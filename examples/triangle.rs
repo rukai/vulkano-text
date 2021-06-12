@@ -6,22 +6,23 @@ use vulkano_text::{DrawText, DrawTextTrait};
 // IMPORT END
 
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
-use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState, SubpassContents};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState, SubpassContents,  CommandBufferUsage};
 use vulkano::device::{Device, DeviceExtensions};
-use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, Subpass, RenderPassAbstract};
+use vulkano::render_pass::{Framebuffer, FramebufferAbstract, Subpass, RenderPass};
 use vulkano::image::SwapchainImage;
+use vulkano::image::view::ImageView;
 use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::pipeline::GraphicsPipeline;
 use vulkano::pipeline::viewport::Viewport;
-use vulkano::swapchain::{AcquireError, PresentMode, SurfaceTransform, Swapchain, SwapchainCreationError, ColorSpace, FullscreenExclusive};
+use vulkano::swapchain::{AcquireError, Swapchain, SwapchainCreationError};
 use vulkano::swapchain;
 use vulkano::sync::{GpuFuture, FlushError};
 use vulkano::sync;
 
 use vulkano_win::VkSurfaceBuild;
-
 use winit::window::{WindowBuilder, Window};
 use winit::event_loop::{EventLoop, ControlFlow};
+
 use winit::event::{Event, WindowEvent};
 
 use std::sync::Arc;
@@ -75,10 +76,15 @@ fn main() {
         let alpha = caps.supported_composite_alpha.iter().next().unwrap();
         let format = caps.supported_formats[0].0;
         let dimensions: [u32; 2] = surface.window().inner_size().into();
-        Swapchain::new(device.clone(), surface.clone(), caps.min_image_count, format,
-            dimensions, 1, usage, &queue, SurfaceTransform::Identity, alpha,
-            PresentMode::Fifo, FullscreenExclusive::Default, true, ColorSpace::SrgbNonLinear).unwrap()
-
+        Swapchain::start(device.clone(), surface.clone())
+            .num_images(caps.min_image_count)
+            .format(format)
+            .dimensions(dimensions)
+            .usage(usage)
+            .sharing_mode(&queue)
+            .composite_alpha(alpha)
+            .build()
+            .unwrap()
     };
 
     let vertex_buffer = {
@@ -148,7 +154,7 @@ fn main() {
                 previous_frame_end.as_mut().unwrap().cleanup_finished();
                 if recreate_swapchain {
                     let dimensions: [u32; 2] = surface.window().inner_size().into();
-                    let (new_swapchain, new_images) = match swapchain.recreate_with_dimensions(dimensions) {
+                    let (new_swapchain, new_images) = match swapchain.recreate().dimensions(dimensions).build() {
                         Ok(r) => r,
                         Err(SwapchainCreationError::UnsupportedDimensions) => return,
                         Err(e) => panic!("Failed to recreate swapchain: {:?}", e)
@@ -192,11 +198,11 @@ fn main() {
 
                 let clear_values = vec!([0.0, 0.0, 0.0, 1.0].into()); // CHANGED TO BLACK BACKGROUND
 
-                let mut builder = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap();
+                let mut builder = AutoCommandBufferBuilder::primary(device.clone(), queue.family(),  CommandBufferUsage::OneTimeSubmit).unwrap();
 
                 builder
                     .begin_render_pass(framebuffers[image_num].clone(), SubpassContents::Inline, clear_values).unwrap()
-                    .draw(pipeline.clone(), &dynamic_state, vertex_buffer.clone(), (), ()).unwrap()
+                    .draw(pipeline.clone(), &dynamic_state, vertex_buffer.clone(), (), (), vec![]).unwrap()
                     .end_render_pass().unwrap()
                     // DRAW THE TEXT
                     .draw_text(&mut draw_text, image_num);
@@ -232,7 +238,7 @@ fn main() {
 /// This method is called once during initialization, then again whenever the window is resized
 fn window_size_dependent_setup(
     images: &[Arc<SwapchainImage<Window>>],
-    render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
+    render_pass: Arc<RenderPass>,
     dynamic_state: &mut DynamicState
 ) -> Vec<Arc<dyn FramebufferAbstract + Send + Sync>> {
     let dimensions = images[0].dimensions();
@@ -245,9 +251,10 @@ fn window_size_dependent_setup(
     dynamic_state.viewports = Some(vec!(viewport));
 
     images.iter().map(|image| {
+        let image_view = ImageView::new(image.clone()).unwrap();
         Arc::new(
             Framebuffer::start(render_pass.clone())
-                .add(image.clone()).unwrap()
+                .add(image_view).unwrap()
                 .build().unwrap()
         ) as Arc<dyn FramebufferAbstract + Send + Sync>
     }).collect::<Vec<_>>()

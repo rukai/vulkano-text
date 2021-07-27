@@ -23,7 +23,6 @@ use winit::event::{Event, WindowEvent};
 use std::sync::Arc;
 use std::time::Instant;
 use std::env;
-use std::any::Any;
 
 fn window_size_dependent_setup(
     device: Arc<Device>,

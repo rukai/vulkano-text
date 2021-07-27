@@ -10,7 +10,7 @@ use vulkano::image::view::ImageView;
 use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::swapchain::{AcquireError, Swapchain, SwapchainCreationError};
-use vulkano::swapchain;
+use vulkano::{swapchain, Version};
 use vulkano::sync::{GpuFuture, FlushError};
 use vulkano::sync;
 
@@ -133,9 +133,9 @@ fn main() {
     };
 
     let required_extensions = vulkano_win::required_extensions();
-    let instance = Instance::new(None, &required_extensions, None).unwrap();
+    let instance = Instance::new(None, Version::V1_2, &required_extensions, None).unwrap();
     let physical = PhysicalDevice::enumerate(&instance).next().unwrap();
-    println!("Using device: {} (type: {:?})", physical.name(), physical.ty());
+    println!("Using device: {} (type: {:?})", physical.properties().device_name.as_ref().unwrap(), physical.properties().device_type.unwrap());
 
     let event_loop = EventLoop::new();
     let window_builder = WindowBuilder::new();

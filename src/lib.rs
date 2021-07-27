@@ -4,7 +4,6 @@ use rusttype::gpu_cache::Cache;
 use vulkano::buffer::{CpuAccessibleBuffer, BufferUsage};
 use vulkano::command_buffer::{DynamicState, AutoCommandBufferBuilder, SubpassContents, PrimaryAutoCommandBuffer};
 use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet};
-use vulkano::descriptor::pipeline_layout::PipelineLayoutAbstract;
 use vulkano::device::{Device, Queue};
 use vulkano::format::{Format, ClearValue};
 use vulkano::render_pass::{Framebuffer, FramebufferAbstract, Subpass, RenderPass};
@@ -12,7 +11,7 @@ use vulkano::image::{SwapchainImage, ImmutableImage, ImageCreateFlags, ImageUsag
 use vulkano::image::view::ImageView;
 use vulkano::pipeline::vertex::SingleBufferDefinition;
 use vulkano::pipeline::viewport::Viewport;
-use vulkano::pipeline::GraphicsPipeline;
+use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
 use vulkano::sampler::{Sampler, Filter, MipmapMode, SamplerAddressMode};
 use vulkano::swapchain::Swapchain;
 
@@ -52,7 +51,7 @@ pub struct DrawText {
     font:               Font<'static>,
     cache:              Cache<'static>,
     cache_pixel_buffer: Vec<u8>,
-    pipeline:           Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, Box<dyn PipelineLayoutAbstract + Send + Sync>>>,
+    pipeline:           Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>>>,
     framebuffers:       Vec<Arc<dyn FramebufferAbstract + Send + Sync>>,
     texts:              Vec<TextData>,
 }
@@ -198,7 +197,7 @@ impl DrawText {
         let cache_texture_view = ImageView::new(cache_texture).unwrap();
 
         let set = Arc::new(
-            PersistentDescriptorSet::start(self.pipeline.descriptor_set_layout(0).unwrap().clone())
+            PersistentDescriptorSet::start(self.pipeline.layout().descriptor_set_layout(0).unwrap().clone())
             .add_sampled_image(cache_texture_view, sampler).unwrap()
             .build().unwrap()
         );

@@ -10,9 +10,9 @@ keywords = ["vulkano", "text", "font"]
 
 [dependencies]
 rusttype = { version = "0.8", features = ["gpu_cache"] }
-vulkano = "0.23"
-vulkano-shaders = "0.23"
+vulkano = "0.24.0"
+vulkano-shaders = "0.24.0"
 
 [dev-dependencies]
-winit = "0.24"
-vulkano-win = "0.23"
+winit = "0.25.0"
+vulkano-win = "0.24.0"
